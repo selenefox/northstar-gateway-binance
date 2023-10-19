@@ -72,7 +72,7 @@ public class BinanceDataServiceManager implements IDataServiceManager {
             String result = client.market().exchangeInfo();
             JSONObject json = JSON.parseObject(result);
             JSONArray symbols = json.getJSONArray("symbols");
-            for(int i=0; i<symbols.size(); i++) {
+            for (int i = 0; i < symbols.size(); i++) {
                 JSONObject obj = symbols.getJSONObject(i);
                 BinanceContract contract = new BinanceContract(obj);
                 ContractDefinition cnFtTt1 = ContractDefinition.builder().name(contract.name()).exchange(contract.exchange()).productClass(contract.productClass())

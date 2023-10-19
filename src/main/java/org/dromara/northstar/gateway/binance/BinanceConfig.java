@@ -31,9 +31,10 @@ public class BinanceConfig {
 
     @Bean
     BinanceGatewayFactory binanceGatewayFactory(FastEventEngine feEngine, IMarketCenter mktCenter,
-                                            @Qualifier("binanceDataServiceManager") BinanceDataServiceManager dsMgr) {
+                                                @Qualifier("binanceDataServiceManager") BinanceDataServiceManager dsMgr) {
         return new BinanceGatewayFactory(feEngine, mktCenter, dsMgr);
     }
+
     @Bean
     BinanceGatewaySettings binanceGatewaySettings() {
         return new BinanceGatewaySettings();
@@ -42,7 +43,10 @@ public class BinanceConfig {
     @Bean
     void setProperty() {
         // 设置代理主机和端口
-
+        System.setProperty("http.proxyHost", "127.0.0.1");
+        System.setProperty("http.proxyPort", "33210");
+        System.setProperty("https.proxyHost", "127.0.0.1");
+        System.setProperty("https.proxyPort", "33210");
 
     }
 
