@@ -18,7 +18,9 @@ import xyz.redtorch.pb.CoreField.ContractField;
 public class BinanceContract implements Instrument{
 
 	private JSONObject json;
-	
+
+	private ContractDefinition contractDef;
+
 	public BinanceContract(JSONObject json) {
 		this.json = json;
 	}
@@ -35,12 +37,12 @@ public class BinanceContract implements Instrument{
 
 	@Override
 	public ProductClassEnum productClass() {
-		return ProductClassEnum.FUTURES;
+		return ProductClassEnum.SWAP;
 	}
 
 	@Override
 	public ExchangeEnum exchange() {
-		return ExchangeEnum.UnknownExchange;
+		return ExchangeEnum.BINANCE;
 	}
 
 	@Override
@@ -50,12 +52,12 @@ public class BinanceContract implements Instrument{
 
 	@Override
 	public ChannelType channelType() {
-//		return ChannelType.BIAN;
-		return null;	// FIXME
+ 		return ChannelType.BIAN;
 	}
 
 	@Override
 	public void setContractDefinition(ContractDefinition contractDef) {
+		this.contractDef = contractDef;
 	}
 
 	/**
