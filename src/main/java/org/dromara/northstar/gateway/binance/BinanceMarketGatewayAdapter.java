@@ -1,33 +1,92 @@
 package org.dromara.northstar.gateway.binance;
 
+import com.binance.connector.client.impl.UMWebsocketClientImpl;
+
 import org.dromara.northstar.common.constant.ChannelType;
 import org.dromara.northstar.common.constant.ConnectionState;
 import org.dromara.northstar.common.event.FastEventEngine;
+import org.dromara.northstar.common.event.NorthstarEventType;
 import org.dromara.northstar.common.model.GatewayDescription;
+import org.dromara.northstar.gateway.GatewayAbstract;
+import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.MarketGateway;
+import org.dromara.northstar.gateway.contract.GatewayContract;
+import org.springframework.beans.factory.annotation.Autowired;
 
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+
+import javax.annotation.Resource;
+
+import lombok.extern.slf4j.Slf4j;
+import xyz.redtorch.pb.CoreField;
 import xyz.redtorch.pb.CoreField.ContractField;
 
+@Slf4j
 public class BinanceMarketGatewayAdapter implements MarketGateway {
 
+	private UMWebsocketClientImpl client;
+
+	private ScheduledExecutorService scheduleExec = Executors.newScheduledThreadPool(0);
+
+	private ScheduledFuture<?> task;
+
+	private long lastActiveTime;
+
 	private FastEventEngine feEngine;
-	
+
+	private IMarketCenter mktCenter;
+
 	private GatewayDescription gd;
-	
-	public BinanceMarketGatewayAdapter(GatewayDescription gd, FastEventEngine feEngine) {
-		this.gd = gd;
+
+	protected ConnectionState connState = ConnectionState.DISCONNECTED;
+
+	public BinanceMarketGatewayAdapter(GatewayDescription gd, FastEventEngine feEngine,IMarketCenter mktCenter) {
 		this.feEngine = feEngine;
+		this.gd = gd;
+		this.mktCenter = mktCenter;
 	}
-	
+
 	@Override
 	public void connect() {
-		
+		connState = ConnectionState.CONNECTED;
+		client = new UMWebsocketClientImpl();
+
+		if(connState == ConnectionState.CONNECTED) {
+			return;
+		}
+		task = scheduleExec.scheduleAtFixedRate(()->{
+			lastActiveTime = System.currentTimeMillis();
+			try {
+				client.continuousKlineStream("btcusdt", "perpetual", "1m", ((event) -> {
+					System.out.println(event);
+				}));
+				for(Map.Entry<String, SimTickGenerator> e: tickGenMap.entrySet()) {
+					CoreField.TickField tick = e.getValue().generateNextTick(LocalDateTime.now());
+					feEngine.emitEvent(NorthstarEventType.TICK, tick);
+					GatewayContract contract = (GatewayContract) mktCenter.getContract(ChannelType.SIM, tick.getUnifiedSymbol());
+					contract.onTick(tick);
+				}
+			} catch (Exception e) {
+				log.error("模拟行情TICK生成异常", e);
+			}
+		}, 500, 500, TimeUnit.MILLISECONDS);
+
+		connState = ConnectionState.CONNECTED;
+		CompletableFuture.runAsync(() -> feEngine.emitEvent(NorthstarEventType.GATEWAY_READY, gd.getGatewayId()),
+				CompletableFuture.delayedExecutor(2, TimeUnit.SECONDS));
+
 	}
 
 	@Override
 	public void disconnect() {
-		// TODO Auto-generated method stub
-		
+		client.closeAllConnections();
+		connState = ConnectionState.DISCONNECTED;
 	}
 
 	@Override
@@ -55,7 +114,7 @@ public class BinanceMarketGatewayAdapter implements MarketGateway {
 
 	@Override
 	public ChannelType channelType() {
-		return null;
+		return ChannelType.BIAN;
 	}
 
 	@Override
@@ -71,8 +130,7 @@ public class BinanceMarketGatewayAdapter implements MarketGateway {
 
 	@Override
 	public ConnectionState getConnectionState() {
-		// TODO Auto-generated method stub
-		return null;
+		return connState;
 	}
 
 }

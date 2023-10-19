@@ -13,10 +13,13 @@ public class BinanceGatewayFactory implements GatewayFactory{
 	private FastEventEngine fastEventEngine;
 	
 	private IMarketCenter mktCenter;
-	
-	public BinanceGatewayFactory(FastEventEngine fastEventEngine, IMarketCenter mktCenter) {
+
+	private BinanceDataServiceManager dataMgr;
+
+	public BinanceGatewayFactory(FastEventEngine fastEventEngine, IMarketCenter mktCenter,BinanceDataServiceManager dataMgr) {
 		this.fastEventEngine = fastEventEngine;
 		this.mktCenter = mktCenter;
+		this.dataMgr = dataMgr;
 	}
 	
 	@Override
@@ -24,7 +27,7 @@ public class BinanceGatewayFactory implements GatewayFactory{
 		BinanceGatewaySettings settings = JSON.parseObject(JSON.toJSONString(gatewayDescription.getSettings()), BinanceGatewaySettings.class);
 		gatewayDescription.setSettings(settings);
 		new BinanceContractProvider(settings, mktCenter).loadContractOptions();
-		return new BinanceMarketGatewayAdapter(gatewayDescription, fastEventEngine);
+		return new BinanceMarketGatewayAdapter(gatewayDescription, fastEventEngine, mktCenter);
 	}
 
 }
