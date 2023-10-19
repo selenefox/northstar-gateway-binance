@@ -15,69 +15,71 @@ import xyz.redtorch.pb.CoreEnum.ProductClassEnum;
 import xyz.redtorch.pb.CoreField.ContractField;
 
 
-public class BinanceContract implements Instrument{
+public class BinanceContract implements Instrument {
 
-	private JSONObject json;
-	
-	public BinanceContract(JSONObject json) {
-		this.json = json;
-	}
+    private JSONObject json;
 
-	@Override
-	public String name() {
-		return json.getString("symbol");
-	}
+    private ContractDefinition contractDef;
 
-	@Override
-	public Identifier identifier() {
-		return Identifier.of(String.format("%s@%s@%s@%s", name(), exchange(), productClass(), channelType()));
-	}
+    public BinanceContract(JSONObject json) {
+        this.json = json;
+    }
 
-	@Override
-	public ProductClassEnum productClass() {
-		return ProductClassEnum.FUTURES;
-	}
+    @Override
+    public String name() {
+        return json.getString("symbol");
+    }
 
-	@Override
-	public ExchangeEnum exchange() {
-		return ExchangeEnum.UnknownExchange;
-	}
+    @Override
+    public Identifier identifier() {
+        return Identifier.of(String.format("%s@%s@%s@%s", name(), exchange(), productClass(), channelType()));
+    }
 
-	@Override
-	public TradeTimeDefinition tradeTimeDefinition() {
-		return new GenericTradeTime();
-	}
+    @Override
+    public ProductClassEnum productClass() {
+        return ProductClassEnum.SWAP;
+    }
 
-	@Override
-	public ChannelType channelType() {
-//		return ChannelType.BIAN;
-		return null;	// FIXME
-	}
+    @Override
+    public ExchangeEnum exchange() {
+        return ExchangeEnum.BINANCE;
+    }
 
-	@Override
-	public void setContractDefinition(ContractDefinition contractDef) {
-	}
+    @Override
+    public TradeTimeDefinition tradeTimeDefinition() {
+        return new GenericTradeTime();
+    }
 
-	/**
-	 * 该合约信息细节还待斟酌
-	 */
-	@Override
-	public ContractField contractField() {
-		return ContractField.newBuilder()
-				.setGatewayId("BIAN")
-				.setSymbol(name())
-				.setName(name())
-				.setFullName(name())
-				.setUnifiedSymbol(String.format("%s@%s@%s", name(), exchange(), productClass()))
-				.setCurrency(CurrencyEnum.USD)
-				.setExchange(exchange())
-				.setProductClass(productClass())
-				.setPriceTick(1)
-				.setMultiplier(1)
-				.setContractId(identifier().value())
-				.setLongMarginRatio(json.getDoubleValue("requiredMarginPercent")/100)
-				.setShortMarginRatio(json.getDoubleValue("requiredMarginPercent")/100)
-				.build();
-	}
-	
+    @Override
+    public ChannelType channelType() {
+        return ChannelType.BIAN;
+    }
+
+    @Override
+    public void setContractDefinition(ContractDefinition contractDef) {
+        this.contractDef = contractDef;
+    }
+
+    /**
+     * 该合约信息细节还待斟酌
+     */
+    @Override
+    public ContractField contractField() {
+        return ContractField.newBuilder()
+                .setGatewayId("BIAN")
+                .setSymbol(name())
+                .setName(name())
+                .setFullName(name())
+                .setUnifiedSymbol(String.format("%s@%s@%s", name(), exchange(), productClass()))
+                .setCurrency(CurrencyEnum.USD)
+                .setExchange(exchange())
+                .setProductClass(productClass())
+                .setPriceTick(1)
+                .setMultiplier(1)
+                .setContractId(identifier().value())
+                .setLongMarginRatio(json.getDoubleValue("requiredMarginPercent") / 100)
+                .setShortMarginRatio(json.getDoubleValue("requiredMarginPercent") / 100)
+                .build();
+    }
+
 }
