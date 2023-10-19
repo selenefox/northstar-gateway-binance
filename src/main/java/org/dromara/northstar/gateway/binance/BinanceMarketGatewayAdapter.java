@@ -10,6 +10,7 @@ import org.dromara.northstar.common.model.GatewayDescription;
 import org.dromara.northstar.gateway.GatewayAbstract;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.MarketGateway;
+import org.dromara.northstar.gateway.TradeGateway;
 import org.dromara.northstar.gateway.contract.GatewayContract;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -28,7 +29,7 @@ import xyz.redtorch.pb.CoreField;
 import xyz.redtorch.pb.CoreField.ContractField;
 
 @Slf4j
-public class BinanceMarketGatewayAdapter implements MarketGateway {
+public class BinanceMarketGatewayAdapter extends GatewayAbstract implements MarketGateway, TradeGateway {
 
     private UMWebsocketClientImpl client;
 
@@ -47,6 +48,7 @@ public class BinanceMarketGatewayAdapter implements MarketGateway {
     protected ConnectionState connState = ConnectionState.DISCONNECTED;
 
     public BinanceMarketGatewayAdapter(FastEventEngine feEngine, GatewayDescription gd, IMarketCenter mktCenter) {
+        super(gd, mktCenter);
         this.feEngine = feEngine;
         this.gd = gd;
         this.mktCenter = mktCenter;
@@ -127,4 +129,13 @@ public class BinanceMarketGatewayAdapter implements MarketGateway {
         return connState;
     }
 
+    @Override
+    public String submitOrder(CoreField.SubmitOrderReqField submitOrderReq) {
+        return null;
+    }
+
+    @Override
+    public boolean cancelOrder(CoreField.CancelOrderReqField cancelOrderReq) {
+        return false;
+    }
 }
