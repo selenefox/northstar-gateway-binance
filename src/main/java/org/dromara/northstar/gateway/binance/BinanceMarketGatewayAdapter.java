@@ -11,18 +11,12 @@ import org.dromara.northstar.gateway.GatewayAbstract;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.MarketGateway;
 import org.dromara.northstar.gateway.TradeGateway;
-import org.dromara.northstar.gateway.contract.GatewayContract;
-import org.springframework.beans.factory.annotation.Autowired;
 
-import java.time.LocalDateTime;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-
-import javax.annotation.Resource;
 
 import lombok.extern.slf4j.Slf4j;
 import xyz.redtorch.pb.CoreField;
@@ -56,33 +50,21 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
 
     @Override
     public void connect() {
-        connState = ConnectionState.CONNECTED;
-        client = new UMWebsocketClientImpl();
-
+        log.debug("[{}] 币安网关连接", gd.getGatewayId());
         if (connState == ConnectionState.CONNECTED) {
             return;
         }
-        task = scheduleExec.scheduleAtFixedRate(() -> {
-            lastActiveTime = System.currentTimeMillis();
-            try {
-                client.continuousKlineStream("btcusdt", "perpetual", "1m", ((event) -> {
-                    System.out.println(event);
-                }));
-            } catch (Exception e) {
-                log.error("模拟行情TICK生成异常", e);
-            }
-        }, 500, 500, TimeUnit.MILLISECONDS);
+        mktCenter.loadContractGroup(ChannelType.BIAN);
+        feEngine.emitEvent(NorthstarEventType.LOGGED_IN, gd.getGatewayId());
+        feEngine.emitEvent(NorthstarEventType.GATEWAY_READY, gatewayId);
 
         connState = ConnectionState.CONNECTED;
-        CompletableFuture.runAsync(() -> feEngine.emitEvent(NorthstarEventType.GATEWAY_READY, gd.getGatewayId()),
-                CompletableFuture.delayedExecutor(2, TimeUnit.SECONDS));
-
     }
 
     @Override
     public void disconnect() {
-        client.closeAllConnections();
         connState = ConnectionState.DISCONNECTED;
+        feEngine.emitEvent(NorthstarEventType.LOGGED_OUT, gatewayId);
     }
 
     @Override
@@ -92,8 +74,12 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
 
     @Override
     public boolean subscribe(ContractField contract) {
+        log.debug("[{}] 币安网关订阅", gd.getGatewayId());
+//        if (gatewayDescription.getGatewayUsage() == GatewayUsage.MARKET_DATA) {
+//            client = new UMWebsocketClientImpl();
+//        }
         // TODO Auto-generated method stub
-        return false;
+        return true;
     }
 
     @Override
