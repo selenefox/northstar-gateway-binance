@@ -79,6 +79,7 @@ public class BinanceContract implements Instrument {
                 .setContractId(identifier().value())
                 .setLongMarginRatio(json.getDoubleValue("requiredMarginPercent") / 100)
                 .setShortMarginRatio(json.getDoubleValue("requiredMarginPercent") / 100)
+                .setChannelType(ChannelType.BIAN.toString())
                 .build();
     }
 
