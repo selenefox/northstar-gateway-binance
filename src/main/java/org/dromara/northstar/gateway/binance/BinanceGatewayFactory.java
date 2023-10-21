@@ -26,7 +26,6 @@ public class BinanceGatewayFactory implements GatewayFactory {
     public Gateway newInstance(GatewayDescription gatewayDescription) {
         BinanceGatewaySettings settings = JSON.parseObject(JSON.toJSONString(gatewayDescription.getSettings()), BinanceGatewaySettings.class);
         gatewayDescription.setSettings(settings);
-        new BinanceContractProvider(settings, mktCenter).loadContractOptions();
         return new BinanceMarketGatewayAdapter(fastEventEngine, gatewayDescription, mktCenter);
     }
 
