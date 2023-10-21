@@ -9,7 +9,11 @@ import com.binance.connector.client.impl.UMFuturesClientImpl;
 import com.binance.connector.client.impl.UMWebsocketClientImpl;
 
 import org.dromara.northstar.common.IDataServiceManager;
+import org.dromara.northstar.common.ObjectManager;
+import org.dromara.northstar.common.constant.ChannelType;
 import org.dromara.northstar.common.constant.DateTimeConstant;
+import org.dromara.northstar.common.model.Identifier;
+import org.dromara.northstar.gateway.Gateway;
 import org.dromara.northstar.gateway.model.ContractDefinition;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -33,9 +37,13 @@ public class BinanceDataServiceManager implements IDataServiceManager {
 
     @Autowired
     private BinanceGatewaySettings settings;
+    @Autowired
+    private ObjectManager<Gateway> gatewayManager;
 
     @Override
     public List<CoreField.BarField> getMinutelyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
+        Gateway gateway = gatewayManager.get(Identifier.of(ChannelType.BIAN.toString()));
+        settings = (BinanceGatewaySettings) gateway.gatewayDescription().getSettings();
         log.debug("历史行情1分钟数据：{}，{} -> {}", contract.getUnifiedSymbol(), startDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER), endDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER));
         return null;
     }

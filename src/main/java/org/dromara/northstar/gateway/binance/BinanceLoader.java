@@ -49,6 +49,8 @@ public class BinanceLoader implements CommandLineRunner {
         gatewayMetaProvider.add(ChannelType.BIAN, new BinanceGatewaySettings(), binanceGatewayFactory, dsMgr);
         // 加载BIAN增加合约定义
         mktCenter.addDefinitions(binanceContractProvider.get());
+        // 注册合约
+        binanceContractProvider.loadContractOptions();
 
         mktCenter.loadContractGroup(ChannelType.BIAN);
     }
