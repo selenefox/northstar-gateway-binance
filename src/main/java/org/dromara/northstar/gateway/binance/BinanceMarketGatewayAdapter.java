@@ -119,6 +119,9 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                 tickBuilder.setVolume((long) volume);
                 tickBuilder.setTurnover((long) turnover);
 
+//                tickBuilder.setBidPrice(Double.valueOf(String.valueOf(map.get("c"))));
+//                tickBuilder.setAskPrice(Double.valueOf(String.valueOf(map.get("c"))));
+
                 tickBuilder.setChannelType(ChannelType.BIAN.toString());
                 CoreField.TickField tick = tickBuilder.build();
                 preTickMap.put(contract.identifier(), tick);
