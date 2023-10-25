@@ -6,7 +6,6 @@ import com.alibaba.fastjson2.JSONObject;
 import com.binance.connector.client.exceptions.BinanceClientException;
 import com.binance.connector.client.exceptions.BinanceConnectorException;
 import com.binance.connector.client.impl.UMFuturesClientImpl;
-import com.binance.connector.client.impl.UMWebsocketClientImpl;
 
 import org.dromara.northstar.common.IDataServiceManager;
 import org.dromara.northstar.common.ObjectManager;
@@ -17,8 +16,12 @@ import org.dromara.northstar.gateway.Gateway;
 import org.dromara.northstar.gateway.model.ContractDefinition;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.text.SimpleDateFormat;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -26,6 +29,7 @@ import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import xyz.redtorch.pb.CoreEnum;
 import xyz.redtorch.pb.CoreField;
+import xyz.redtorch.pb.CoreField.BarField;
 
 /**
  * @author 李嘉豪
@@ -40,30 +44,28 @@ public class BinanceDataServiceManager implements IDataServiceManager {
     @Autowired
     private ObjectManager<Gateway> gatewayManager;
 
+    String format = LocalDate.now().format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
+
+    private UMFuturesClientImpl client = new UMFuturesClientImpl();
+
     @Override
     public List<CoreField.BarField> getMinutelyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        Gateway gateway = gatewayManager.get(Identifier.of(ChannelType.BIAN.toString()));
-        settings = (BinanceGatewaySettings) gateway.gatewayDescription().getSettings();
-        log.debug("历史行情1分钟数据：{}，{} -> {}", contract.getUnifiedSymbol(), startDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER), endDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER));
-        return null;
+        return getHistoricalData(contract,startDate,endDate,"1m");
     }
 
     @Override
     public List<CoreField.BarField> getQuarterlyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        log.debug("历史行情15分钟数据：{}，{} -> {}", contract.getUnifiedSymbol(), startDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER), endDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER));
-        return null;
+        return getHistoricalData(contract,startDate,endDate,"15m");
     }
 
     @Override
     public List<CoreField.BarField> getHourlyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        log.debug("历史行情1小时数据：{}，{} -> {}", contract.getUnifiedSymbol(), startDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER), endDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER));
-        return null;
+        return getHistoricalData(contract,startDate,endDate,"1h");
     }
 
     @Override
     public List<CoreField.BarField> getDailyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        log.debug("历史行情1天数据：{}，{} -> {}", contract.getUnifiedSymbol(), startDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER), endDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER));
-        return null;
+        return getHistoricalData(contract,startDate,endDate,"1d");
     }
 
     @Override
@@ -94,5 +96,46 @@ public class BinanceDataServiceManager implements IDataServiceManager {
                     e.getMessage(), e.getErrMsg(), e.getErrorCode(), e.getHttpStatusCode(), e);
         }
         return resultList;
+    }
+
+    public List<CoreField.BarField> getHistoricalData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate, String interval) {
+        log.debug("历史行情{}数据：{}，{} -> {}", interval, contract.getUnifiedSymbol(), startDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER), endDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER));
+        Gateway gateway = gatewayManager.get(Identifier.of(ChannelType.BIAN.toString()));
+        settings = (BinanceGatewaySettings) gateway.gatewayDescription().getSettings();
+        SimpleDateFormat sdf = new SimpleDateFormat("HHmmssSSS");
+        String actionTime = sdf.format(new Date());
+        LinkedList<CoreField.BarField> barFieldList = new LinkedList<>();
+        LinkedHashMap<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("symbol", contract.getSymbol());
+        parameters.put("interval", interval);
+        parameters.put("startTime", startDate);
+        parameters.put("endTime", endDate);
+        String result = client.market().klines(parameters);
+        List<String[]> klinesList = JSON.parseArray(result, String[].class);
+        for (String[] s : klinesList) {
+            double volume = Double.parseDouble(s[5]);
+            double turnover = Double.parseDouble(s[7]);
+            double numTrades = Double.parseDouble(s[8]);
+            barFieldList.addFirst(BarField.newBuilder()
+                    .setUnifiedSymbol(contract.getSymbol())
+                    .setGatewayId(contract.getGatewayId())
+                    .setTradingDay(format)
+                    .setActionDay(format)
+                    .setActionTime(actionTime)
+                    .setActionTimestamp(Long.parseLong(s[0]))
+                    .setOpenPrice(Double.valueOf(s[1]))
+                    .setHighPrice(Double.valueOf(s[2]))
+                    .setLowPrice(Double.valueOf(s[3]))
+                    .setClosePrice(Double.valueOf(s[4]))
+                    .setVolume((long) volume)
+                    .setVolumeDelta((long) volume)
+                    .setTurnover(turnover)
+                    .setTurnoverDelta(turnover)
+                    .setNumTrades((long) numTrades)
+                    .setNumTradesDelta((long) numTrades)
+                    .setChannelType(ChannelType.BIAN.toString())
+                    .build());
+        }
+        return barFieldList;
     }
 }
