@@ -16,11 +16,11 @@ import org.dromara.northstar.gateway.Gateway;
 import org.dromara.northstar.gateway.model.ContractDefinition;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import java.text.SimpleDateFormat;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -102,8 +102,10 @@ public class BinanceDataServiceManager implements IDataServiceManager {
         log.debug("历史行情{}数据：{}，{} -> {}", interval, contract.getUnifiedSymbol(), startDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER), endDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER));
         Gateway gateway = gatewayManager.get(Identifier.of(ChannelType.BIAN.toString()));
         settings = (BinanceGatewaySettings) gateway.gatewayDescription().getSettings();
-        SimpleDateFormat sdf = new SimpleDateFormat("HHmmssSSS");
-        String actionTime = sdf.format(new Date());
+
+        LocalDateTime dateTime = null;
+        String actionTime = "";
+
         LinkedList<CoreField.BarField> barFieldList = new LinkedList<>();
         LinkedHashMap<String, Object> parameters = new LinkedHashMap<>();
         parameters.put("symbol", contract.getSymbol());
@@ -113,6 +115,9 @@ public class BinanceDataServiceManager implements IDataServiceManager {
         String result = client.market().klines(parameters);
         List<String[]> klinesList = JSON.parseArray(result, String[].class);
         for (String[] s : klinesList) {
+            // 将时间戳转换为LocalDateTime对象
+            dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(Long.parseLong(s[0])), ZoneId.systemDefault());
+            actionTime = dateTime.format(DateTimeConstant.T_FORMAT_FORMATTER);
             double volume = Double.parseDouble(s[5]);
             double turnover = Double.parseDouble(s[7]);
             double numTrades = Double.parseDouble(s[8]);
