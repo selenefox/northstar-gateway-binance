@@ -44,8 +44,6 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
 
     protected ConnectionState connState = ConnectionState.DISCONNECTED;
 
-    private Map<Identifier, CoreField.TickField> preTickMap = new HashMap<>();
-
     private List<Integer> streamIdList;
 
     private volatile long lastUpdateTickTime = System.currentTimeMillis();
@@ -94,15 +92,55 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
         log.debug("[{}] 币安网关订阅", gd.getGatewayId());
         String symbol = contractField.getSymbol();
         Contract contract = mktCenter.getContract(ChannelType.BIAN, symbol);
-        int streamId = getSymbolTicker(symbol, contract);
-        streamIdList.add(streamId);
+        int tickerStreamId = getSymbolTicker(symbol, contract);
+        int klineStreamId = getKlineStream(symbol, contract);
+        streamIdList.add(tickerStreamId);
+        streamIdList.add(klineStreamId);
         return true;
+    }
+
+    private int getKlineStream(String symbol, Contract contract) {
+        return client.klineStream(symbol, "1m", ((event) -> {
+            Map map = JSON.parseObject(event, Map.class);
+            Map k = JSON.parseObject(JSON.toJSONString(map.get("k")), Map.class);
+            try {
+                LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli((Long) map.get("E")), ZoneId.systemDefault());
+                String actionTime = dateTime.format(DateTimeConstant.T_FORMAT_WITH_MS_INT_FORMATTER);
+                String tradingDay = dateTime.format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
+
+                double volume = Double.parseDouble((String) k.get("v"));
+                double turnover = Double.parseDouble((String) k.get("q"));
+                Long numTrades = Long.valueOf(String.valueOf(k.get("n")));
+
+                CoreField.BarField bar = CoreField.BarField.newBuilder()
+                        .setUnifiedSymbol(contract.contractField().getUnifiedSymbol())
+                        .setGatewayId(gatewayId)
+                        .setTradingDay(tradingDay)
+                        .setActionDay(tradingDay)
+                        .setActionTime(actionTime)
+                        .setActionTimestamp((Long) map.get("E"))
+                        .setOpenPrice(Double.valueOf(String.valueOf(k.get("o"))))
+                        .setHighPrice(Double.valueOf(String.valueOf(k.get("h"))))
+                        .setLowPrice(Double.valueOf(String.valueOf(k.get("l"))))
+                        .setClosePrice(Double.valueOf(String.valueOf(k.get("c"))))
+                        .setVolume((long) volume)
+                        .setVolumeDelta((long) volume)
+                        .setTurnover(turnover)
+                        .setTurnoverDelta(turnover)
+                        .setNumTrades(numTrades)
+                        .setNumTradesDelta(numTrades)
+                        .setChannelType(ChannelType.BIAN.toString())
+                        .build();
+                feEngine.emitEvent(NorthstarEventType.BAR, bar);
+            } catch (Throwable t) {
+                log.error("{} OnRtnDepthMarketData Exception", logInfo, t);
+            }
+        }));
     }
 
     //精简信息 每500毫秒推送
     private int getMiniTickerStream(String symbol, GatewayContract contract, String format, String actionTime) {
         return client.miniTickerStream(symbol, ((event) -> {
-            System.out.println(event);
             Map map = JSON.parseObject(event, Map.class);
             try {
                 ContractField c = contract.contractField();
@@ -130,7 +168,6 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
 
                 tickBuilder.setChannelType(ChannelType.BIAN.toString());
                 CoreField.TickField tick = tickBuilder.build();
-                preTickMap.put(contract.identifier(), tick);
                 feEngine.emitEvent(NorthstarEventType.TICK, tick);
                 contract.onTick(tick);
             } catch (Throwable t) {
@@ -142,7 +179,6 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
     //完整信息 每2000毫秒推送
     private int getSymbolTicker(String symbol, Contract contract) {
         return client.symbolTicker(symbol, ((event) -> {
-            System.out.println(event);
             Map map = JSON.parseObject(event, Map.class);
             try {
                 LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli((Long) map.get("E")), ZoneId.systemDefault());
@@ -173,9 +209,7 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
 
                 tickBuilder.setChannelType(ChannelType.BIAN.toString());
                 CoreField.TickField tick = tickBuilder.build();
-                preTickMap.put(contract.identifier(), tick);
                 feEngine.emitEvent(NorthstarEventType.TICK, tick);
-                mktCenter.onTick(tick);
                 lastUpdateTickTime = System.currentTimeMillis();
             } catch (Throwable t) {
                 log.error("{} OnRtnDepthMarketData Exception", logInfo, t);
