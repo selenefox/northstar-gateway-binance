@@ -66,7 +66,7 @@ public class BinanceContract implements Instrument {
     @Override
     public ContractField contractField() {
         return ContractField.newBuilder()
-                .setGatewayId("BIAN")
+                .setGatewayId(ChannelType.BIAN.toString())
                 .setSymbol(name())
                 .setName(name())
                 .setFullName(name())
@@ -74,7 +74,7 @@ public class BinanceContract implements Instrument {
                 .setCurrency(CurrencyEnum.USD)
                 .setExchange(exchange())
                 .setProductClass(productClass())
-                .setPriceTick(1)
+                .setPriceTick(json.getDoubleValue("pricePrecision"))
                 .setMultiplier(1)
                 .setContractId(identifier().value())
                 .setLongMarginRatio(json.getDoubleValue("requiredMarginPercent") / 100)
