@@ -43,6 +43,10 @@ public class BinanceConfig {
     @Bean
     void setProperty() {
         // 设置代理主机和端口
+        System.setProperty("http.proxyHost", "127.0.0.1");
+        System.setProperty("http.proxyPort", "33210");
+        System.setProperty("https.proxyHost", "127.0.0.1");
+        System.setProperty("https.proxyPort", "33210");
 
     }
 
