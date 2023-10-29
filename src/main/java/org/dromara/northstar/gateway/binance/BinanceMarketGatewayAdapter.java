@@ -10,7 +10,6 @@ import org.dromara.northstar.common.constant.TickType;
 import org.dromara.northstar.common.event.FastEventEngine;
 import org.dromara.northstar.common.event.NorthstarEventType;
 import org.dromara.northstar.common.model.GatewayDescription;
-import org.dromara.northstar.common.model.Identifier;
 import org.dromara.northstar.gateway.Contract;
 import org.dromara.northstar.gateway.GatewayAbstract;
 import org.dromara.northstar.gateway.IMarketCenter;
@@ -21,8 +20,8 @@ import org.dromara.northstar.gateway.contract.GatewayContract;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -92,33 +91,40 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
         log.debug("[{}] 币安网关订阅", gd.getGatewayId());
         String symbol = contractField.getSymbol();
         Contract contract = mktCenter.getContract(ChannelType.BIAN, symbol);
-        int tickerStreamId = getSymbolTicker(symbol, contract);
-        int klineStreamId = getKlineStream(symbol, contract);
+        //成交量精度
+        double quantityPrecision = 1 / Math.pow(10, contract.contractField().getQuantityPrecision());
+
+        int tickerStreamId = getSymbolTicker(symbol, contract, quantityPrecision);
+        int klineStreamId = getKlineStream(symbol, contract, quantityPrecision);
         streamIdList.add(tickerStreamId);
         streamIdList.add(klineStreamId);
+
         return true;
     }
 
-    private int getKlineStream(String symbol, Contract contract) {
+    //使用币安提供的k线，有问题会出现两条k线
+    private int getKlineStream(String symbol, Contract contract, double quantityPrecision) {
+
         return client.klineStream(symbol, "1m", ((event) -> {
             Map map = JSON.parseObject(event, Map.class);
             Map k = JSON.parseObject(JSON.toJSONString(map.get("k")), Map.class);
             try {
-                LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli((Long) map.get("E")), ZoneId.systemDefault());
-                String actionTime = dateTime.format(DateTimeConstant.T_FORMAT_WITH_MS_INT_FORMATTER);
+                if (!(Boolean) k.get("x")) {
+                    return;
+                }
+                LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli((Long) map.get("E")), ZoneId.systemDefault()).withSecond(0).withNano(0);
+                String actionTime = dateTime.format(DateTimeConstant.T_FORMAT_FORMATTER);
                 String tradingDay = dateTime.format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
-
-                double volume = Double.parseDouble((String) k.get("v"));
+                double volume = Double.parseDouble((String) k.get("v")) / quantityPrecision; //成交量精度
                 double turnover = Double.parseDouble((String) k.get("q"));
                 Long numTrades = Long.valueOf(String.valueOf(k.get("n")));
-
                 CoreField.BarField bar = CoreField.BarField.newBuilder()
                         .setUnifiedSymbol(contract.contractField().getUnifiedSymbol())
                         .setGatewayId(gatewayId)
                         .setTradingDay(tradingDay)
                         .setActionDay(tradingDay)
                         .setActionTime(actionTime)
-                        .setActionTimestamp((Long) map.get("E"))
+                        .setActionTimestamp(dateTime.toInstant(ZoneOffset.ofHours(8)).toEpochMilli())
                         .setOpenPrice(Double.valueOf(String.valueOf(k.get("o"))))
                         .setHighPrice(Double.valueOf(String.valueOf(k.get("h"))))
                         .setLowPrice(Double.valueOf(String.valueOf(k.get("l"))))
@@ -134,6 +140,9 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                 feEngine.emitEvent(NorthstarEventType.BAR, bar);
             } catch (Throwable t) {
                 log.error("{} OnRtnDepthMarketData Exception", logInfo, t);
+                //断练重新连接
+                int klineStreamId = getKlineStream(symbol, contract, quantityPrecision);
+                streamIdList.add(klineStreamId);
             }
         }));
     }
@@ -177,14 +186,14 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
     }
 
     //完整信息 每2000毫秒推送
-    private int getSymbolTicker(String symbol, Contract contract) {
+    private int getSymbolTicker(String symbol, Contract contract, double quantityPrecision) {
         return client.symbolTicker(symbol, ((event) -> {
+            ContractField c = contract.contractField();
             Map map = JSON.parseObject(event, Map.class);
             try {
                 LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli((Long) map.get("E")), ZoneId.systemDefault());
                 String actionTime = dateTime.format(DateTimeConstant.T_FORMAT_WITH_MS_INT_FORMATTER);
                 String tradingDay = dateTime.format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
-                ContractField c = contract.contractField();
                 CoreField.TickField.Builder tickBuilder = CoreField.TickField.newBuilder();
                 tickBuilder.setUnifiedSymbol(c.getUnifiedSymbol());
                 tickBuilder.setGatewayId(gatewayId);
@@ -199,10 +208,14 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                 tickBuilder.setLowPrice(Double.valueOf(String.valueOf(map.get("l"))));
                 tickBuilder.setOpenPrice(Double.valueOf(String.valueOf(map.get("o"))));
                 double volume = Double.parseDouble((String) map.get("v"));
+                double Q = Double.parseDouble((String) map.get("Q"));
                 double turnover = Double.parseDouble((String) map.get("q"));
 
-                tickBuilder.setVolume((long) volume);
-                tickBuilder.setTurnover((long) turnover);
+                tickBuilder.setVolume((long) Q);
+                //成交量按照最小交易单位数量实现
+                tickBuilder.setVolumeDelta((long) (Q / quantityPrecision));
+                tickBuilder.setTurnover(turnover);
+                tickBuilder.setTurnoverDelta(turnover);
 
 //                tickBuilder.setBidPrice(Double.valueOf(String.valueOf(map.get("c"))));
 //                tickBuilder.setAskPrice(Double.valueOf(String.valueOf(map.get("c"))));
@@ -212,7 +225,9 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                 feEngine.emitEvent(NorthstarEventType.TICK, tick);
                 lastUpdateTickTime = System.currentTimeMillis();
             } catch (Throwable t) {
-                log.error("{} OnRtnDepthMarketData Exception", logInfo, t);
+                //断练重新连接
+                int klineStreamId = getSymbolTicker(symbol, contract, quantityPrecision);
+                streamIdList.add(klineStreamId);
             }
         }));
     }
