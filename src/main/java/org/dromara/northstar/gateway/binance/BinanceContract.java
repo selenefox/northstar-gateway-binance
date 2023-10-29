@@ -75,6 +75,8 @@ public class BinanceContract implements Instrument {
                 .setExchange(exchange())
                 .setProductClass(productClass())
                 .setPriceTick(json.getDoubleValue("pricePrecision"))
+                .setPricePrecision(json.getIntValue("pricePrecision"))
+                .setQuantityPrecision(json.getIntValue("quantityPrecision"))
                 .setMultiplier(1)
                 .setContractId(identifier().value())
                 .setLongMarginRatio(json.getDoubleValue("requiredMarginPercent") / 100)
