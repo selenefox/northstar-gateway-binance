@@ -114,11 +114,14 @@ public class BinanceDataServiceManager implements IDataServiceManager {
         parameters.put("endTime", endDate);
         String result = client.market().klines(parameters);
         List<String[]> klinesList = JSON.parseArray(result, String[].class);
+        double quantityPrecision = 1 / Math.pow(10, contract.getQuantityPrecision());
+
         for (String[] s : klinesList) {
             // 将时间戳转换为LocalDateTime对象
             dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(Long.parseLong(s[0])), ZoneId.systemDefault());
-            actionTime = dateTime.format(DateTimeConstant.T_FORMAT_FORMATTER);
-            double volume = Double.parseDouble(s[5]);
+            actionTime = dateTime.format(DateTimeConstant.T_FORMAT_WITH_MS_INT_FORMATTER);
+
+            double volume = Double.parseDouble(s[5]) / quantityPrecision;
             double turnover = Double.parseDouble(s[7]);
             double numTrades = Double.parseDouble(s[8]);
             barFieldList.addFirst(BarField.newBuilder()
