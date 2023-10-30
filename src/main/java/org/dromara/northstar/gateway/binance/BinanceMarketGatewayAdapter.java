@@ -101,8 +101,11 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
 
         return true;
     }
-
-    //使用币安提供的k线，有问题会出现两条k线
+    /**
+     * <br>Description:获取k线组装BAR数据
+     * <br>Author: 李嘉豪
+     * <br>Date:2023年10月30日
+     */
     private int getKlineStream(String symbol, Contract contract, double quantityPrecision) {
 
         return client.klineStream(symbol, "1m", ((event) -> {
@@ -147,83 +150,81 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
         }));
     }
 
-    //精简信息 每500毫秒推送
-    private int getMiniTickerStream(String symbol, GatewayContract contract, String format, String actionTime) {
-        return client.miniTickerStream(symbol, ((event) -> {
-            Map map = JSON.parseObject(event, Map.class);
-            try {
-                ContractField c = contract.contractField();
-                CoreField.TickField.Builder tickBuilder = CoreField.TickField.newBuilder();
-                tickBuilder.setUnifiedSymbol(c.getUnifiedSymbol());
-                tickBuilder.setGatewayId(gatewayId);
-                tickBuilder.setTradingDay(format);
-                tickBuilder.setActionDay(format);
-                tickBuilder.setActionTime(actionTime);
-                tickBuilder.setActionTimestamp((Long) map.get("E"));
-                tickBuilder.setStatus(TickType.NORMAL_TICK.getCode());
-                tickBuilder.setLastPrice(Double.valueOf(String.valueOf(map.get("c"))));
-                //tickBuilder.setAvgPrice(Double.valueOf(String.valueOf(map.get("w"))));
-                tickBuilder.setHighPrice(Double.valueOf(String.valueOf(map.get("h"))));
-                tickBuilder.setLowPrice(Double.valueOf(String.valueOf(map.get("l"))));
-                tickBuilder.setOpenPrice(Double.valueOf(String.valueOf(map.get("o"))));
-                double volume = Double.parseDouble((String) map.get("v"));
-                double turnover = Double.parseDouble((String) map.get("q"));
-
-                tickBuilder.setVolume((long) volume);
-                tickBuilder.setTurnover((long) turnover);
-
-//                tickBuilder.setBidPrice(Double.valueOf(String.valueOf(map.get("c"))));
-//                tickBuilder.setAskPrice(Double.valueOf(String.valueOf(map.get("c"))));
-
-                tickBuilder.setChannelType(ChannelType.BIAN.toString());
-                CoreField.TickField tick = tickBuilder.build();
-                feEngine.emitEvent(NorthstarEventType.TICK, tick);
-                contract.onTick(tick);
-            } catch (Throwable t) {
-                log.error("{} OnRtnDepthMarketData Exception", logInfo, t);
-            }
-        }));
-    }
-
-    //完整信息 每2000毫秒推送
+    //获取完整Ticker信息 每2000毫秒推送
     private int getSymbolTicker(String symbol, Contract contract, double quantityPrecision) {
-        return client.symbolTicker(symbol, ((event) -> {
+        ArrayList<String> streams = new ArrayList<>();
+        String ticker = String.format("%s@ticker", symbol.toLowerCase());
+        String depth = String.format("%s@depth5@500ms", symbol.toLowerCase());
+        streams.add(ticker);
+        streams.add(depth);
+
+        List<Double> bidPriceList = new ArrayList<>();
+        List<Double> askPriceList = new ArrayList<>();
+        List<Integer> bidVolumeList = new ArrayList<>();
+        List<Integer> askVolumeList = new ArrayList<>();
+        return client.combineStreams(streams, ((event) -> {
             ContractField c = contract.contractField();
             Map map = JSON.parseObject(event, Map.class);
             try {
-                LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli((Long) map.get("E")), ZoneId.systemDefault());
-                String actionTime = dateTime.format(DateTimeConstant.T_FORMAT_WITH_MS_INT_FORMATTER);
-                String tradingDay = dateTime.format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
-                CoreField.TickField.Builder tickBuilder = CoreField.TickField.newBuilder();
-                tickBuilder.setUnifiedSymbol(c.getUnifiedSymbol());
-                tickBuilder.setGatewayId(gatewayId);
-                tickBuilder.setTradingDay(tradingDay);
-                tickBuilder.setActionDay(tradingDay);
-                tickBuilder.setActionTime(actionTime);
-                tickBuilder.setActionTimestamp((Long) map.get("E"));
-                tickBuilder.setStatus(TickType.NORMAL_TICK.getCode());
-                tickBuilder.setLastPrice(Double.valueOf(String.valueOf(map.get("c"))));
-                tickBuilder.setAvgPrice(Double.valueOf(String.valueOf(map.get("w"))));
-                tickBuilder.setHighPrice(Double.valueOf(String.valueOf(map.get("h"))));
-                tickBuilder.setLowPrice(Double.valueOf(String.valueOf(map.get("l"))));
-                tickBuilder.setOpenPrice(Double.valueOf(String.valueOf(map.get("o"))));
-                double volume = Double.parseDouble((String) map.get("v"));
-                double Q = Double.parseDouble((String) map.get("Q"));
-                double turnover = Double.parseDouble((String) map.get("q"));
+                if (depth.equals(map.get("stream"))) {
+                    Map data = JSON.parseObject(JSON.toJSONString(map.get("data")), Map.class);
+                    // 从Map中获取买方和卖方的数据
+                    List<List<String>> bids = (List<List<String>>) data.get("b");
+                    List<List<String>> asks = (List<List<String>>) data.get("a");
+                    bidPriceList.clear();
+                    askPriceList.clear();
+                    bidVolumeList.clear();
+                    askVolumeList.clear();
 
-                tickBuilder.setVolume((long) Q);
-                //成交量按照最小交易单位数量实现
-                tickBuilder.setVolumeDelta((long) (Q / quantityPrecision));
-                tickBuilder.setTurnover(turnover);
-                tickBuilder.setTurnoverDelta(turnover);
+                    // 分别提取买方和卖方的价格和数量
+                    for (List<String> bid : bids) {
+                        bidPriceList.add(Double.parseDouble(bid.get(0)));
+                        bidVolumeList.add((int) (Double.parseDouble(bid.get(1)) / quantityPrecision));
+                    }
 
-//                tickBuilder.setBidPrice(Double.valueOf(String.valueOf(map.get("c"))));
-//                tickBuilder.setAskPrice(Double.valueOf(String.valueOf(map.get("c"))));
+                    for (List<String> ask : asks) {
+                        askPriceList.add(Double.parseDouble(ask.get(0)));
+                        askVolumeList.add((int) (Double.parseDouble(ask.get(1)) / quantityPrecision));
+                    }
+                } else if (ticker.equals(map.get("stream"))) {
+                    Map data = JSON.parseObject(JSON.toJSONString(map.get("data")), Map.class);
+                    LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli((Long) data.get("E")), ZoneId.systemDefault());
+                    String actionTime = dateTime.format(DateTimeConstant.T_FORMAT_WITH_MS_INT_FORMATTER);
+                    String tradingDay = dateTime.format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
+                    CoreField.TickField.Builder tickBuilder = CoreField.TickField.newBuilder();
+                    tickBuilder.setUnifiedSymbol(c.getUnifiedSymbol());
+                    tickBuilder.setGatewayId(gatewayId);
+                    tickBuilder.setTradingDay(tradingDay);
+                    tickBuilder.setActionDay(tradingDay);
+                    tickBuilder.setActionTime(actionTime);
+                    tickBuilder.setActionTimestamp((Long) data.get("E"));
+                    tickBuilder.setStatus(TickType.NORMAL_TICK.getCode());
+                    tickBuilder.setLastPrice(Double.valueOf(String.valueOf(data.get("c"))));
+                    tickBuilder.setAvgPrice(Double.valueOf(String.valueOf(data.get("w"))));
+                    tickBuilder.setHighPrice(Double.valueOf(String.valueOf(data.get("h"))));
+                    tickBuilder.setLowPrice(Double.valueOf(String.valueOf(data.get("l"))));
+                    tickBuilder.setOpenPrice(Double.valueOf(String.valueOf(data.get("o"))));
+                    double volume = Double.parseDouble((String) data.get("v"));
+                    double Q = Double.parseDouble((String) data.get("Q"));
+                    double turnover = Double.parseDouble((String) data.get("q"));
 
-                tickBuilder.setChannelType(ChannelType.BIAN.toString());
-                CoreField.TickField tick = tickBuilder.build();
-                feEngine.emitEvent(NorthstarEventType.TICK, tick);
-                lastUpdateTickTime = System.currentTimeMillis();
+                    tickBuilder.setVolume((long) Q);
+                    //成交量按照最小交易单位数量实现
+                    tickBuilder.setVolumeDelta((long) (Q / quantityPrecision));
+                    tickBuilder.setTurnover(turnover);
+                    tickBuilder.setTurnoverDelta(turnover);
+
+                    tickBuilder.addAllAskPrice(askPriceList);
+                    tickBuilder.addAllBidPrice(bidPriceList);
+                    tickBuilder.addAllAskVolume(askVolumeList);
+                    tickBuilder.addAllBidVolume(bidVolumeList);
+
+                    tickBuilder.setChannelType(ChannelType.BIAN.toString());
+                    CoreField.TickField tick = tickBuilder.build();
+                    feEngine.emitEvent(NorthstarEventType.TICK, tick);
+                    lastUpdateTickTime = System.currentTimeMillis();
+                }
+
             } catch (Throwable t) {
                 //断练重新连接
                 int klineStreamId = getSymbolTicker(symbol, contract, quantityPrecision);
