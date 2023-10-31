@@ -1,0 +1,53 @@
+package org.dromara.northstar.gateway.binance;
+
+import org.dromara.northstar.common.event.FastEventEngine;
+import org.dromara.northstar.gateway.IMarketCenter;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestTemplate;
+
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * @author 李嘉豪
+ * @version 1.0
+ * @date 2023/9/21 13:14
+ */
+@Slf4j
+@Configuration
+public class BinanceConfig {
+    static {
+        log.info("=====================================================");
+        log.info("                  加载binance                         ");
+        log.info("=====================================================");
+    }
+
+    @Bean
+    BinanceDataServiceManager binanceDataServiceManager(RestTemplate restTemplate) {
+        return new BinanceDataServiceManager();
+    }
+
+
+    @Bean
+    BinanceGatewayFactory binanceGatewayFactory(FastEventEngine feEngine, IMarketCenter mktCenter,
+                                                @Qualifier("binanceDataServiceManager") BinanceDataServiceManager dsMgr) {
+        return new BinanceGatewayFactory(feEngine, mktCenter, dsMgr);
+    }
+
+    @Bean
+    BinanceGatewaySettings binanceGatewaySettings() {
+        return new BinanceGatewaySettings();
+    }
+
+    @Bean
+    void setProperty() {
+        // 设置代理主机和端口
+        System.setProperty("http.proxyHost", "127.0.0.1");
+        System.setProperty("http.proxyPort", "33210");
+        System.setProperty("https.proxyHost", "127.0.0.1");
+        System.setProperty("https.proxyPort", "33210");
+
+    }
+
+}
