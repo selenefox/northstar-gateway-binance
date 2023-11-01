@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -70,7 +71,7 @@ public class BinanceDataServiceManager implements IDataServiceManager {
 
     @Override
     public List<LocalDate> getHolidays(CoreEnum.ExchangeEnum exchange, LocalDate startDate, LocalDate endDate) {
-        return null;
+        return Collections.emptyList();
     }
 
     @Override
