@@ -9,7 +9,6 @@ import org.dromara.northstar.common.event.FastEventEngine;
 import org.dromara.northstar.common.event.NorthstarEventType;
 import org.dromara.northstar.common.exception.TradeException;
 import org.dromara.northstar.common.model.GatewayDescription;
-import org.dromara.northstar.common.model.OrderRequest;
 import org.dromara.northstar.data.ISimAccountRepository;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.TradeGateway;
@@ -19,17 +18,13 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import xyz.redtorch.pb.CoreEnum;
 import xyz.redtorch.pb.CoreField;
 import xyz.redtorch.pb.CoreField.CancelOrderReqField;
-import xyz.redtorch.pb.CoreField.OrderField;
 import xyz.redtorch.pb.CoreField.SubmitOrderReqField;
-import xyz.redtorch.pb.CoreField.TickField;
-import xyz.redtorch.pb.CoreField.TradeField;
 
 @Slf4j
 public class BinanceTradeGatewayLocal implements TradeGateway {
@@ -67,7 +62,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         feEngine.emitEvent(NorthstarEventType.LOGGED_IN, gd.getGatewayId());
         CompletableFuture.runAsync(() -> feEngine.emitEvent(NorthstarEventType.GATEWAY_READY, gd.getGatewayId()),
                 CompletableFuture.delayedExecutor(2, TimeUnit.SECONDS));
-
+        //更新合约多头空头保证金率，添加持仓回报事件
         String result = futuresClient.account().accountInformation(new LinkedHashMap<>());
         JSONObject jsonObject = JSON.parseObject(result);
         statusReportTimer = new Timer("BinanceGatewayTimelyReport", true);
