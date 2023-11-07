@@ -1,7 +1,6 @@
 package org.dromara.northstar.gateway.binance;
 
 import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
 import com.binance.connector.client.impl.UMFuturesClientImpl;
 import com.binance.connector.client.impl.UMWebsocketClientImpl;
 
@@ -16,8 +15,6 @@ import org.dromara.northstar.gateway.Contract;
 import org.dromara.northstar.gateway.GatewayAbstract;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.MarketGateway;
-import org.dromara.northstar.gateway.TradeGateway;
-import org.dromara.northstar.gateway.contract.GatewayContract;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -25,21 +22,16 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Timer;
-import java.util.TimerTask;
 
 import lombok.extern.slf4j.Slf4j;
-import xyz.redtorch.pb.CoreEnum;
 import xyz.redtorch.pb.CoreField;
 import xyz.redtorch.pb.CoreField.ContractField;
 
-import static com.alibaba.fastjson2.JSON.parseObject;
-
 @Slf4j
-public class BinanceMarketGatewayAdapter extends GatewayAbstract implements MarketGateway, TradeGateway {
+public class BinanceMarketGatewayAdapter extends GatewayAbstract implements MarketGateway{
 
     private UMWebsocketClientImpl client;
 
@@ -80,38 +72,6 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
         feEngine.emitEvent(NorthstarEventType.LOGGED_IN, gd.getGatewayId());
         feEngine.emitEvent(NorthstarEventType.GATEWAY_READY, gatewayId);
 
-        String result = futuresClient.account().accountInformation(new LinkedHashMap<>());
-        JSONObject jsonObject = JSON.parseObject(result);
-        statusReportTimer = new Timer("BinanceGatewayTimelyReport", true);
-        statusReportTimer.scheduleAtFixedRate(new TimerTask() {
-
-            @Override
-            public void run() {
-
-                CoreField.AccountField.Builder accountBuilder = CoreField.AccountField.newBuilder();
-
-                accountBuilder.setAccountId(gatewayId);
-                accountBuilder.setCode(gatewayId);
-                accountBuilder.setCurrency(CoreEnum.CurrencyEnum.USD);
-                accountBuilder.setAvailable(jsonObject.getDouble("totalWalletBalance"));
-                accountBuilder.setCloseProfit(jsonObject.getDouble("totalUnrealizedProfit"));
-                //TODO，ETH/BTC期货合约将按照BUSD手续费表计。这里币安返回的feeTier是手续费等级,0=0.0200%/0.0500%(USDT-Maker / Taker),暂时写死后续处理
-                accountBuilder.setCommission(Double.valueOf(0.0002));
-                accountBuilder.setGatewayId(gatewayId);
-                accountBuilder.setMargin(jsonObject.getDouble("totalInitialMargin"));
-                accountBuilder.setPositionProfit(jsonObject.getDouble("totalCrossUnPnl"));
-                accountBuilder.setPreBalance(0);
-                accountBuilder.setDeposit(0);
-                accountBuilder.setWithdraw(0);
-                accountBuilder.setHolder("");
-
-                accountBuilder.setBalance(jsonObject.getDouble("totalMarginBalance"));
-                feEngine.emitEvent(NorthstarEventType.ACCOUNT, accountBuilder);
-                feEngine.emitEvent(NorthstarEventType.POSITION, CoreField.PositionField.newBuilder());
-            }
-
-        }, 5000, 2000);
-
         connState = ConnectionState.CONNECTED;
     }
 
@@ -124,6 +84,7 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
         }
         feEngine.emitEvent(NorthstarEventType.LOGGING_OUT, gatewayId);
         feEngine.emitEvent(NorthstarEventType.LOGGED_OUT, gatewayId);
+        statusReportTimer.cancel();
         connState = ConnectionState.DISCONNECTED;
     }
 
@@ -315,13 +276,4 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
         return connState;
     }
 
-    @Override
-    public String submitOrder(CoreField.SubmitOrderReqField submitOrderReq) {
-        return null;
-    }
-
-    @Override
-    public boolean cancelOrder(CoreField.CancelOrderReqField cancelOrderReq) {
-        return false;
-    }
 }

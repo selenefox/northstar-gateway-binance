@@ -1,5 +1,6 @@
 package org.dromara.northstar.gateway.binance;
 
+import org.dromara.northstar.common.constant.GatewayUsage;
 import org.dromara.northstar.common.event.FastEventEngine;
 import org.dromara.northstar.common.model.GatewayDescription;
 import org.dromara.northstar.gateway.Gateway;
@@ -26,7 +27,10 @@ public class BinanceGatewayFactory implements GatewayFactory {
     public Gateway newInstance(GatewayDescription gatewayDescription) {
         BinanceGatewaySettings settings = JSON.parseObject(JSON.toJSONString(gatewayDescription.getSettings()), BinanceGatewaySettings.class);
         gatewayDescription.setSettings(settings);
-        return new BinanceMarketGatewayAdapter(fastEventEngine, gatewayDescription, mktCenter);
+        if(gatewayDescription.getGatewayUsage() == GatewayUsage.MARKET_DATA) {
+            return new BinanceMarketGatewayAdapter(fastEventEngine, gatewayDescription, mktCenter);
+        }
+        return new BinanceTradeGatewayLocal(fastEventEngine, gatewayDescription, mktCenter);
     }
 
 }
