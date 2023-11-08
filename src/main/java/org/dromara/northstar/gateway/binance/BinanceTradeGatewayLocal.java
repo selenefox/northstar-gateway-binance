@@ -1,23 +1,29 @@
 package org.dromara.northstar.gateway.binance;
 
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
+
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import com.binance.connector.client.impl.UMFuturesClientImpl;
 
+import org.dromara.northstar.common.constant.ChannelType;
 import org.dromara.northstar.common.constant.ConnectionState;
 import org.dromara.northstar.common.event.FastEventEngine;
 import org.dromara.northstar.common.event.NorthstarEventType;
 import org.dromara.northstar.common.exception.TradeException;
 import org.dromara.northstar.common.model.GatewayDescription;
 import org.dromara.northstar.data.ISimAccountRepository;
+import org.dromara.northstar.gateway.Contract;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.TradeGateway;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -48,7 +54,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     public BinanceTradeGatewayLocal(FastEventEngine feEngine, GatewayDescription gd, IMarketCenter mktCenter) {
         BinanceGatewaySettings settings = (BinanceGatewaySettings) gd.getSettings();
-        this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(),settings.getSecretKey());
+        this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey());
         this.feEngine = feEngine;
         this.gd = gd;
         this.mktCenter = mktCenter;
@@ -56,15 +62,17 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     @Override
     public void connect() {
-        log.debug("[{}] 模拟网关连线", gd.getGatewayId());
+        log.debug("[{}] 账户网关连线", gd.getGatewayId());
         connected = true;
         connState = ConnectionState.CONNECTED;
         feEngine.emitEvent(NorthstarEventType.LOGGED_IN, gd.getGatewayId());
         CompletableFuture.runAsync(() -> feEngine.emitEvent(NorthstarEventType.GATEWAY_READY, gd.getGatewayId()),
                 CompletableFuture.delayedExecutor(2, TimeUnit.SECONDS));
-        //更新合约多头空头保证金率，添加持仓回报事件
         String result = futuresClient.account().accountInformation(new LinkedHashMap<>());
+        //更新合约多头空头保证金率，添加持仓回报事件
         JSONObject jsonObject = JSON.parseObject(result);
+        JSONArray positions = jsonObject.getJSONArray("positions");
+        List<JSONObject> positionList = positions.stream().map(item -> (JSONObject) item).filter(item -> item.getDouble("positionAmt") > 0).collect(Collectors.toList());
         statusReportTimer = new Timer("BinanceGatewayTimelyReport", true);
         statusReportTimer.scheduleAtFixedRate(new TimerTask() {
 
@@ -80,13 +88,34 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                         .setGatewayId(gd.getGatewayId())
                         .setCurrency(CoreEnum.CurrencyEnum.USD)
                         .setName("BIAN")
-                        .setDeposit(0)
-                        .setWithdraw(0)
                         .setMargin(jsonObject.getDouble("totalInitialMargin"))
                         .setPositionProfit(jsonObject.getDouble("totalCrossUnPnl"))
                         .build();
                 feEngine.emitEvent(NorthstarEventType.ACCOUNT, accountBuilder);
-                //feEngine.emitEvent(NorthstarEventType.POSITION, CoreField.PositionField.newBuilder());
+                for (JSONObject position : positionList) {
+                    String symbol = position.getString("symbol");
+                    String positionSide = position.getString("positionSide");
+                    String positionId = symbol + "@" + ChannelType.BIAN + "@" + CoreEnum.ProductClassEnum.SWAP + "@" + positionSide + "@" + positionSide;
+                    Contract contract = mktCenter.getContract(ChannelType.BIAN, symbol);
+                    CoreField.ContractField contracted = contract.contractField();
+                    //持仓数量按照最小交易精度转换
+                    int positionAmt = Double.valueOf(position.getIntValue("positionAmt") / contracted.getMultiplier()).intValue();
+
+                    CoreField.PositionField.Builder positionBuilder = CoreField.PositionField.newBuilder()
+                            .setPositionId(positionId)
+                            .setAccountId(gd.getGatewayId())
+                            .setGatewayId(gd.getGatewayId())
+                            .setPositionDirection("SHORT".equals(positionSide) ? CoreEnum.PositionDirectionEnum.PD_Short : CoreEnum.PositionDirectionEnum.PD_Long)
+                            .setPosition(positionAmt)
+                            .setPrice(position.getDouble("entryPrice"))
+                            .setPositionProfit(position.getDouble("unrealizedProfit"))
+                            .setUseMargin(position.getDouble("positionInitialMargin"));
+                    if (positionBuilder.getUseMargin() != 0) {
+                        positionBuilder.setPositionProfitRatio(positionBuilder.getPositionProfit() / positionBuilder.getUseMargin());
+                        positionBuilder.setOpenPositionProfitRatio(positionBuilder.getOpenPositionProfit() / positionBuilder.getUseMargin());
+                    }
+                    feEngine.emitEvent(NorthstarEventType.POSITION, positionBuilder.build());
+                }
             }
 
         }, 5000, 2000);
