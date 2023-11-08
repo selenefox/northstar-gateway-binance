@@ -84,7 +84,6 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
         }
         feEngine.emitEvent(NorthstarEventType.LOGGING_OUT, gatewayId);
         feEngine.emitEvent(NorthstarEventType.LOGGED_OUT, gatewayId);
-        statusReportTimer.cancel();
         connState = ConnectionState.DISCONNECTED;
     }
 
