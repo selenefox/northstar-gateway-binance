@@ -139,7 +139,54 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         if (!isConnected()) {
             throw new IllegalStateException("网关未连线");
         }
-        log.info("[{}] 模拟网关收到下单请求", gd.getGatewayId());
+        log.info("[{}] 网关收到下单请求,参数:[{}]", gd.getGatewayId(),submitOrderReq);
+        LinkedHashMap<String, Object> parameters = new LinkedHashMap<>();
+
+        CoreField.ContractField contract = submitOrderReq.getContract();
+        CoreEnum.DirectionEnum direction = submitOrderReq.getDirection();
+        CoreEnum.OffsetFlagEnum offsetFlag = submitOrderReq.getOffsetFlag();
+        CoreEnum.TimeConditionEnum timeCondition = submitOrderReq.getTimeCondition();
+        //数量 * 最小交易数量
+        double quantity = submitOrderReq.getVolume() * contract.getMultiplier();
+        String side;
+        String positionSide;
+        String timeInForce;
+        String type;
+        //开仓
+        if (CoreEnum.OffsetFlagEnum.OF_Open.getNumber() == offsetFlag.getNumber()) {
+            side = "BUY";
+        } else {
+            side = "SELL";
+        }
+        //持仓方向 或
+        if (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) {
+            positionSide = "LONG";
+        } else {
+            positionSide = "SHORT";
+        }
+        //有效方式
+        switch (timeCondition) {
+            case TC_IOC -> timeInForce = "IOC";
+            case TC_GTD -> timeInForce = "GTD";
+            case TC_GTC -> timeInForce = "GTC";
+            default -> timeInForce = "GTC";
+        }
+        //订单种类,市价单不传价格
+        if (submitOrderReq.getPrice() == 0) {
+            type = "MARKET";
+        } else {
+            type = "LIMIT";
+            parameters.put("price", submitOrderReq.getPrice());
+        }
+
+        parameters.put("symbol", contract.getSymbol());
+        parameters.put("side", side);
+        parameters.put("positionSide", positionSide);
+        parameters.put("type", type);
+        parameters.put("timeInForce", timeInForce);
+        parameters.put("quantity", quantity);
+        parameters.put("newClientOrderId", submitOrderReq.getOriginOrderId());
+        //String s = futuresClient.account().newOrder(parameters);
         return submitOrderReq.getOriginOrderId();
     }
 
@@ -148,7 +195,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         if (!isConnected()) {
             throw new IllegalStateException("网关未连线");
         }
-        log.info("[{}] 模拟网关收到撤单请求", gd.getGatewayId());
+        log.info("[{}] 网关收到撤单请求", gd.getGatewayId());
         return true;
     }
 
