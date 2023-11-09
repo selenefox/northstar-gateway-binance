@@ -19,6 +19,7 @@ import org.dromara.northstar.gateway.TradeGateway;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
@@ -51,6 +52,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
     private IMarketCenter mktCenter;
 
     private UMFuturesClientImpl futuresClient;
+
+    private Map<String,String> orderIdBySymbol;
 
     public BinanceTradeGatewayLocal(FastEventEngine feEngine, GatewayDescription gd, IMarketCenter mktCenter) {
         BinanceGatewaySettings settings = (BinanceGatewaySettings) gd.getSettings();
@@ -186,7 +189,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         parameters.put("timeInForce", timeInForce);
         parameters.put("quantity", quantity);
         parameters.put("newClientOrderId", submitOrderReq.getOriginOrderId());
-        //String s = futuresClient.account().newOrder(parameters);
+        String s = futuresClient.account().newOrder(parameters);
+        orderIdBySymbol.put(submitOrderReq.getOriginOrderId(), contract.getSymbol())
         return submitOrderReq.getOriginOrderId();
     }
 
@@ -196,6 +200,11 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             throw new IllegalStateException("网关未连线");
         }
         log.info("[{}] 网关收到撤单请求", gd.getGatewayId());
+        LinkedHashMap<String, Object> parameters = new LinkedHashMap<>();
+
+        parameters.put("symbol", orderIdBySymbol.get(cancelOrderReq.getOrderId()));
+        parameters.put("orderId", cancelOrderReq.getOrderId());
+        futuresClient.account().cancelOrder(parameters);
         return true;
     }
 
