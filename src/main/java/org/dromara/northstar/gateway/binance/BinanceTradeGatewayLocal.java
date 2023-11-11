@@ -9,25 +9,32 @@ import com.binance.connector.client.impl.UMWebsocketClientImpl;
 
 import org.dromara.northstar.common.constant.ChannelType;
 import org.dromara.northstar.common.constant.ConnectionState;
+import org.dromara.northstar.common.constant.DateTimeConstant;
 import org.dromara.northstar.common.event.FastEventEngine;
 import org.dromara.northstar.common.event.NorthstarEventType;
 import org.dromara.northstar.common.exception.TradeException;
 import org.dromara.northstar.common.model.GatewayDescription;
+import org.dromara.northstar.common.model.OrderRequest;
 import org.dromara.northstar.data.ISimAccountRepository;
 import org.dromara.northstar.gateway.Contract;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.TradeGateway;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import lombok.Getter;
@@ -49,27 +56,24 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     private ConnectionState connState = ConnectionState.DISCONNECTED;
 
-    private ISimAccountRepository simAccountRepo;
-
     private Timer statusReportTimer;
 
     private IMarketCenter mktCenter;
 
+    private BinanceGatewaySettings settings;
+
     private UMFuturesClientImpl futuresClient;
 
-    private Map<String,String> orderIdBySymbol;
+    protected Map<String, CoreField.OrderField> orderMap = new HashMap<>();
 
-    private UMWebsocketClientImpl websocketClient;
+    private UMWebsocketClientImpl websocketClient = new UMWebsocketClientImpl();
 
-    private List<Integer> streamIdList;
+    private List<Integer> streamIdList = new ArrayList<>();
 
 
     public BinanceTradeGatewayLocal(FastEventEngine feEngine, GatewayDescription gd, IMarketCenter mktCenter) {
-        BinanceGatewaySettings settings = (BinanceGatewaySettings) gd.getSettings();
+        this.settings = (BinanceGatewaySettings) gd.getSettings();
         this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey());
-        this.websocketClient = new UMWebsocketClientImpl();
-        this.streamIdList = new ArrayList<>();
-        this.orderIdBySymbol = new HashMap<>();
         this.feEngine = feEngine;
         this.gd = gd;
         this.mktCenter = mktCenter;
@@ -84,22 +88,14 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         CompletableFuture.runAsync(() -> feEngine.emitEvent(NorthstarEventType.GATEWAY_READY, gd.getGatewayId()),
                 CompletableFuture.delayedExecutor(2, TimeUnit.SECONDS));
 
-        String result = futuresClient.account().accountInformation(new LinkedHashMap<>());
-        //更新合约多头空头保证金率，添加持仓回报事件
-        JSONObject jsonObject = JSON.parseObject(result);
-        JSONArray positions = jsonObject.getJSONArray("positions");
+        //获取账户信息
+        AtomicReference<JSONObject> jsonObject = new AtomicReference<>(getAccountInformation());
+        JSONArray positions = jsonObject.get().getJSONArray("positions");
         List<JSONObject> positionList = positions.stream().map(item -> (JSONObject) item).filter(item -> item.getDouble("positionAmt") > 0).collect(Collectors.toList());
 
-        //生成listenKey
-        String listen = futuresClient.userData().createListenKey();
-        JSONObject jsonListenKey = JSON.parseObject(listen);
-        //账户信息推送
-        int listenKeyStreamId = websocketClient.listenUserStream(jsonListenKey.getString("listenKey"), ((event) -> {
-            JSONObject eventJson = JSON.parseObject(listen);
-
-        }));
-        streamIdList.add(listenKeyStreamId);
-
+        //查询全部挂单
+        String result = futuresClient.account().currentAllOpenOrders(new LinkedHashMap<>());
+        List<JSONObject> openOrderList = JSON.parseArray(result).stream().map(item -> (JSONObject) item).collect(Collectors.toList());
         //查询全部订单
         List<JSONObject> allOrders = new ArrayList<>();
         for (JSONObject position : positionList) {
@@ -108,28 +104,50 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             List<JSONObject> orderList = JSON.parseArray(futuresClient.account().allOrders(parameters)).stream().map(x -> (JSONObject) x).collect(Collectors.toList());
             allOrders.addAll(orderList);
         }
+        allOrders.addAll(openOrderList);
         //维护订单ID和symbol的map
-        orderIdBySymbol = allOrders.stream().collect(Collectors.toMap(x -> x.getString("clientOrderId"), x -> x.getString("symbol")));
+        for (JSONObject order : allOrders) {
+            CoreField.ContractField contractField = mktCenter.getContract(ChannelType.BIAN, order.getString("symbol")).contractField();
+            String side = order.getString("side");
+            String positionSide = order.getString("positionSide");
+            CoreEnum.DirectionEnum dBuy = null;
+            CoreEnum.OffsetFlagEnum offsetFlag = null;
+            if ("BUY".equals(side)) {
+                dBuy = CoreEnum.DirectionEnum.D_Buy;
+                offsetFlag = CoreEnum.OffsetFlagEnum.OF_Open;
+            } else if ("SELL".equals(side)) {
+                dBuy = CoreEnum.DirectionEnum.D_Sell;
+                offsetFlag = CoreEnum.OffsetFlagEnum.OF_Close;
+            }
+            CoreField.OrderField.Builder orderBuilder = getOrderBuilder(dBuy, order, contractField, offsetFlag);
+            orderMap.put(order.getString("clientOrderId"), orderBuilder.build());
+        }
+
+        //生成listenKey
+        String listen = futuresClient.userData().createListenKey();
+        JSONObject jsonListenKey = JSON.parseObject(listen);
+        try {
+            streamIdList.add(listenUserStream(jsonListenKey, jsonObject));
+        } catch (Exception t) {
+            //断练重新连接
+            t.getStackTrace();
+            log.error("账户信息推送断练重新连接");
+            streamIdList.add(listenUserStream(jsonListenKey, jsonObject));
+        }
 
         statusReportTimer = new Timer("BinanceGatewayTimelyReport", true);
         statusReportTimer.scheduleAtFixedRate(new TimerTask() {
-
             @Override
             public void run() {
-                CoreField.AccountField accountBuilder = CoreField.AccountField.newBuilder()
-                        .setAccountId(gd.getGatewayId())
-                        .setAvailable(jsonObject.getDouble("availableBalance"))
-                        .setBalance(jsonObject.getDouble("totalCrossWalletBalance"))
-                        .setCloseProfit(jsonObject.getDouble("totalUnrealizedProfit"))
-                        //TODO，ETH/BTC期货合约将按照BUSD手续费表计。这里币安返回的feeTier是手续费等级,0=0.0200%/0.0500%(USDT-Maker / Taker),暂时写死后续处理
-                        .setCommission(Double.valueOf(0.0002))
-                        .setGatewayId(gd.getGatewayId())
-                        .setCurrency(CoreEnum.CurrencyEnum.USD)
-                        .setName("BIAN")
-                        .setMargin(jsonObject.getDouble("totalInitialMargin"))
-                        .setPositionProfit(jsonObject.getDouble("totalCrossUnPnl"))
-                        .build();
-                feEngine.emitEvent(NorthstarEventType.ACCOUNT, accountBuilder);
+                //延长listenKey有效期
+                futuresClient.userData().extendListenKey();
+            }
+        }, 5000, 1800000);
+        statusReportTimer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                //账户事件
+                getAccountField(jsonObject.get());
                 for (JSONObject position : allOrders) {
                     String symbol = position.getString("symbol");
                     String positionSide = position.getString("positionSide");
@@ -159,6 +177,55 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         }, 5000, 2000);
     }
 
+    private int listenUserStream(JSONObject jsonListenKey, AtomicReference<JSONObject> jsonObject) {
+        //账户信息推送
+        return websocketClient.listenUserStream(jsonListenKey.getString("listenKey"), ((event) -> {
+            log.info("账户信息推送:[{}]", event);
+            JSONObject eventJson = JSON.parseObject(event);
+            switch (eventJson.getString("e")) {
+                case "ORDER_TRADE_UPDATE" -> jsonObject.set(orderTradeUpdate(eventJson));
+                case "ACCOUNT_UPDATE" -> jsonObject.set(accountUpdate(eventJson));
+            }
+
+        }));
+    }
+
+    @Nullable
+    private JSONObject getAccountInformation() {
+        String result = futuresClient.account().accountInformation(new LinkedHashMap<>());
+        //更新合约多头空头保证金率，添加持仓回报事件
+        JSONObject jsonObject = JSON.parseObject(result);
+        return jsonObject;
+    }
+
+    @NotNull
+    private void getAccountField(JSONObject jsonObject) {
+        CoreField.AccountField accountBuilder = CoreField.AccountField.newBuilder()
+                .setAccountId(gd.getGatewayId())
+                .setAvailable(jsonObject.getDouble("availableBalance"))
+                .setBalance(jsonObject.getDouble("totalCrossWalletBalance"))
+                .setCloseProfit(jsonObject.getDouble("totalUnrealizedProfit"))
+                //TODO，ETH/BTC期货合约将按照BUSD手续费表计。这里币安返回的feeTier是手续费等级,0=0.0200%/0.0500%(USDT-Maker / Taker),暂时写死后续处理
+                .setCommission(Double.valueOf(0.0002))
+                .setGatewayId(gd.getGatewayId())
+                .setCurrency(CoreEnum.CurrencyEnum.USD)
+                .setName("BIAN")
+                .setMargin(jsonObject.getDouble("totalInitialMargin"))
+                .setPositionProfit(jsonObject.getDouble("totalCrossUnPnl"))
+                .build();
+        feEngine.emitEvent(NorthstarEventType.ACCOUNT, accountBuilder);
+    }
+
+    //Balance和Position更新推送
+    private JSONObject accountUpdate(JSONObject eventJson) {
+        return getAccountInformation();
+    }
+
+    //订单/交易 更新推送
+    private JSONObject orderTradeUpdate(JSONObject json) {
+        return getAccountInformation();
+    }
+
     @Override
     public void disconnect() {
         log.debug("[{}] 模拟网关断开", gd.getGatewayId());
@@ -182,7 +249,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         if (!isConnected()) {
             throw new IllegalStateException("网关未连线");
         }
-        log.info("[{}] 网关收到下单请求,参数:[{}]", gd.getGatewayId(),submitOrderReq);
+        log.info("[{}] 网关收到下单请求,参数:[{}]", gd.getGatewayId(), submitOrderReq);
         LinkedHashMap<String, Object> parameters = new LinkedHashMap<>();
 
         CoreField.ContractField contract = submitOrderReq.getContract();
@@ -229,9 +296,41 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         parameters.put("timeInForce", timeInForce);
         parameters.put("quantity", quantity);
         parameters.put("newClientOrderId", submitOrderReq.getOriginOrderId());
+
+        //向币安提交订单
         String s = futuresClient.account().newOrder(parameters);
-        orderIdBySymbol.put(submitOrderReq.getOriginOrderId(), contract.getSymbol());
+        log.info("[{}] 网关收到下单返回,响应:[{}]", gd.getGatewayId(), s);
+
+        JSONObject orderJson = JSON.parseObject(s);
+
+        CoreField.OrderField.Builder orderBuilder = getOrderBuilder(direction, orderJson, contract, offsetFlag);
+        orderMap.put(submitOrderReq.getOriginOrderId(), orderBuilder.build());
         return submitOrderReq.getOriginOrderId();
+    }
+
+    @NotNull
+    private CoreField.OrderField.Builder getOrderBuilder(CoreEnum.DirectionEnum directionEnum, JSONObject orderJson, CoreField.ContractField contract, CoreEnum.OffsetFlagEnum offsetFlag) {
+        CoreField.OrderField.Builder orderBuilder = CoreField.OrderField.newBuilder();
+
+        //数量 * 最小交易数量
+        int origQty = (int) Math.round(orderJson.getDouble("origQty") * Math.pow(10, contract.getQuantityPrecision()));
+        int executedQty = (int) Math.round(orderJson.getDouble("executedQty") * Math.pow(10, contract.getQuantityPrecision()));
+        orderBuilder.setOrderId(orderJson.getString("clientOrderId"));
+        orderBuilder.setOriginOrderId(orderJson.getString("clientOrderId"));
+        orderBuilder.setAccountId(settings.getApiKey());
+        orderBuilder.setDirection(directionEnum);
+        orderBuilder.setOffsetFlag(offsetFlag);
+        orderBuilder.setOrderStatus(CoreEnum.OrderStatusEnum.OS_AllTraded);
+        orderBuilder.setPrice(orderJson.getDouble("price"));
+        orderBuilder.setTotalVolume(origQty);
+        orderBuilder.setTradedVolume(executedQty);
+        orderBuilder.setContract(contract);
+        orderBuilder.setGatewayId(gd.getGatewayId());
+        orderBuilder.setStatusMsg("已报单").setOrderStatus(CoreEnum.OrderStatusEnum.OS_Unknown);
+        orderBuilder.setCancelTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
+        orderBuilder.setUpdateTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
+        feEngine.emitEvent(NorthstarEventType.ORDER, orderBuilder.build());
+        return orderBuilder;
     }
 
     @Override
@@ -241,10 +340,19 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         }
         log.info("[{}] 网关收到撤单请求", gd.getGatewayId());
         LinkedHashMap<String, Object> parameters = new LinkedHashMap<>();
-
-        parameters.put("symbol", orderIdBySymbol.get(cancelOrderReq.getOrderId()));
-        parameters.put("orderId", cancelOrderReq.getOrderId());
+        CoreField.OrderField order = orderMap.get(cancelOrderReq.getOriginOrderId());
+        String symbol = order.getContract().getSymbol();
+        parameters.put("symbol", symbol);
+        parameters.put("origClientOrderId", cancelOrderReq.getOriginOrderId());
         futuresClient.account().cancelOrder(parameters);
+        CoreField.OrderField.Builder builder = order.toBuilder()
+                .setStatusMsg("已撤单")
+                .setOrderStatus(CoreEnum.OrderStatusEnum.OS_Canceled)
+                .setCancelTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER))
+                .setUpdateTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
+
+        feEngine.emitEvent(NorthstarEventType.ORDER, builder.build());
+        log.info("[{}] 订单反馈：{} {} {} {} {}", order.getGatewayId(), order.getOrderDate(), order.getUpdateTime(), order.getOriginOrderId(), order.getOrderStatus(), order.getStatusMsg());
         return true;
     }
 
