@@ -74,7 +74,6 @@ public class UMAccount extends Account {
      *    https://binance-docs.github.io/apidocs/futures/en/#current-all-open-orders-user_data</a>
      */
     public String currentAllOpenOrders(LinkedHashMap<String, Object> parameters) {
-        ParameterChecker.checkParameter(parameters, "symbol", String.class);
         return super.currentAllOpenOrders(parameters);
     }
 
