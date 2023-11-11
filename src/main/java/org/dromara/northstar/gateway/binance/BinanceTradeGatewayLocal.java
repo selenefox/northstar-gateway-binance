@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.binance.connector.client.impl.UMFuturesClientImpl;
+import com.binance.connector.client.impl.UMWebsocketClientImpl;
 
 import org.dromara.northstar.common.constant.ChannelType;
 import org.dromara.northstar.common.constant.ConnectionState;
@@ -17,6 +18,9 @@ import org.dromara.northstar.gateway.Contract;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.TradeGateway;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,9 +59,17 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     private Map<String,String> orderIdBySymbol;
 
+    private UMWebsocketClientImpl websocketClient;
+
+    private List<Integer> streamIdList;
+
+
     public BinanceTradeGatewayLocal(FastEventEngine feEngine, GatewayDescription gd, IMarketCenter mktCenter) {
         BinanceGatewaySettings settings = (BinanceGatewaySettings) gd.getSettings();
         this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey());
+        this.websocketClient = new UMWebsocketClientImpl();
+        this.streamIdList = new ArrayList<>();
+        this.orderIdBySymbol = new HashMap<>();
         this.feEngine = feEngine;
         this.gd = gd;
         this.mktCenter = mktCenter;
@@ -71,11 +83,34 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         feEngine.emitEvent(NorthstarEventType.LOGGED_IN, gd.getGatewayId());
         CompletableFuture.runAsync(() -> feEngine.emitEvent(NorthstarEventType.GATEWAY_READY, gd.getGatewayId()),
                 CompletableFuture.delayedExecutor(2, TimeUnit.SECONDS));
+
         String result = futuresClient.account().accountInformation(new LinkedHashMap<>());
         //更新合约多头空头保证金率，添加持仓回报事件
         JSONObject jsonObject = JSON.parseObject(result);
         JSONArray positions = jsonObject.getJSONArray("positions");
         List<JSONObject> positionList = positions.stream().map(item -> (JSONObject) item).filter(item -> item.getDouble("positionAmt") > 0).collect(Collectors.toList());
+
+        //生成listenKey
+        String listen = futuresClient.userData().createListenKey();
+        JSONObject jsonListenKey = JSON.parseObject(listen);
+        //账户信息推送
+        int listenKeyStreamId = websocketClient.listenUserStream(jsonListenKey.getString("listenKey"), ((event) -> {
+            JSONObject eventJson = JSON.parseObject(listen);
+
+        }));
+        streamIdList.add(listenKeyStreamId);
+
+        //查询全部订单
+        List<JSONObject> allOrders = new ArrayList<>();
+        for (JSONObject position : positionList) {
+            LinkedHashMap<String, Object> parameters = new LinkedHashMap<>();
+            parameters.put("symbol", position.getString("symbol"));
+            List<JSONObject> orderList = JSON.parseArray(futuresClient.account().allOrders(parameters)).stream().map(x -> (JSONObject) x).collect(Collectors.toList());
+            allOrders.addAll(orderList);
+        }
+        //维护订单ID和symbol的map
+        orderIdBySymbol = allOrders.stream().collect(Collectors.toMap(x -> x.getString("clientOrderId"), x -> x.getString("symbol")));
+
         statusReportTimer = new Timer("BinanceGatewayTimelyReport", true);
         statusReportTimer.scheduleAtFixedRate(new TimerTask() {
 
@@ -95,7 +130,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                         .setPositionProfit(jsonObject.getDouble("totalCrossUnPnl"))
                         .build();
                 feEngine.emitEvent(NorthstarEventType.ACCOUNT, accountBuilder);
-                for (JSONObject position : positionList) {
+                for (JSONObject position : allOrders) {
                     String symbol = position.getString("symbol");
                     String positionSide = position.getString("positionSide");
                     String positionId = symbol + "@" + ChannelType.BIAN + "@" + CoreEnum.ProductClassEnum.SWAP + "@" + positionSide + "@" + positionSide;
@@ -127,8 +162,13 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
     @Override
     public void disconnect() {
         log.debug("[{}] 模拟网关断开", gd.getGatewayId());
+        Iterator<Integer> iterator = streamIdList.iterator();
         connected = false;
         connState = ConnectionState.DISCONNECTED;
+        while (iterator.hasNext()) {
+            websocketClient.closeConnection(iterator.next());
+            iterator.remove();
+        }
         statusReportTimer.cancel();
     }
 
@@ -190,7 +230,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         parameters.put("quantity", quantity);
         parameters.put("newClientOrderId", submitOrderReq.getOriginOrderId());
         String s = futuresClient.account().newOrder(parameters);
-        orderIdBySymbol.put(submitOrderReq.getOriginOrderId(), contract.getSymbol())
+        orderIdBySymbol.put(submitOrderReq.getOriginOrderId(), contract.getSymbol());
         return submitOrderReq.getOriginOrderId();
     }
 
