@@ -77,10 +77,10 @@ public class BinanceContract implements Instrument {
                 .setPriceTick(json.getDoubleValue("pricePrecision"))
                 .setPricePrecision(json.getIntValue("pricePrecision"))
                 .setQuantityPrecision(json.getIntValue("quantityPrecision"))
-                .setMultiplier(1)
+                .setMultiplier(1 / Math.pow(10, json.getIntValue("quantityPrecision")))
                 .setContractId(identifier().value())
-                .setLongMarginRatio(json.getDoubleValue("requiredMarginPercent") / 100)
-                .setShortMarginRatio(json.getDoubleValue("requiredMarginPercent") / 100)
+                .setLongMarginRatio(json.getDoubleValue("longMarginRatio"))
+                .setShortMarginRatio(json.getDoubleValue("shortMarginRatio"))
                 .setChannelType(ChannelType.BIAN.toString())
                 .build();
     }
