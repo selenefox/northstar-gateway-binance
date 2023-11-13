@@ -91,22 +91,12 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         //获取账户信息
         AtomicReference<JSONObject> jsonObject = new AtomicReference<>(getAccountInformation());
         JSONArray positions = jsonObject.get().getJSONArray("positions");
-        List<JSONObject> positionList = positions.stream().map(item -> (JSONObject) item).filter(item -> item.getDouble("positionAmt") > 0).collect(Collectors.toList());
 
         //查询全部挂单
         String result = futuresClient.account().currentAllOpenOrders(new LinkedHashMap<>());
         List<JSONObject> openOrderList = JSON.parseArray(result).stream().map(item -> (JSONObject) item).collect(Collectors.toList());
-        //查询全部订单
-        List<JSONObject> allOrders = new ArrayList<>();
-        for (JSONObject position : positionList) {
-            LinkedHashMap<String, Object> parameters = new LinkedHashMap<>();
-            parameters.put("symbol", position.getString("symbol"));
-            List<JSONObject> orderList = JSON.parseArray(futuresClient.account().allOrders(parameters)).stream().map(x -> (JSONObject) x).collect(Collectors.toList());
-            allOrders.addAll(orderList);
-        }
-        allOrders.addAll(openOrderList);
         //维护订单ID和symbol的map
-        for (JSONObject order : allOrders) {
+        for (JSONObject order : openOrderList) {
             CoreField.ContractField contractField = mktCenter.getContract(ChannelType.BIAN, order.getString("symbol")).contractField();
             String side = order.getString("side");
             String positionSide = order.getString("positionSide");
@@ -126,7 +116,9 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         //生成listenKey
         String listen = futuresClient.userData().createListenKey();
         JSONObject jsonListenKey = JSON.parseObject(listen);
+
         try {
+            //Websocket 账户信息推送
             streamIdList.add(listenUserStream(jsonListenKey, jsonObject));
         } catch (Exception t) {
             //断练重新连接
@@ -146,9 +138,12 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         statusReportTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
+                JSONObject accountInformation = getAccountInformation();
                 //账户事件
-                getAccountField(jsonObject.get());
-                for (JSONObject position : allOrders) {
+                getAccountField(accountInformation);
+                List<JSONObject> positionList = positions.stream().map(item -> (JSONObject) item).filter(item -> item.getDouble("positionAmt") > 0).collect(Collectors.toList());
+
+                for (JSONObject position : positionList) {
                     String symbol = position.getString("symbol");
                     String positionSide = position.getString("positionSide");
                     String positionId = symbol + "@" + ChannelType.BIAN + "@" + CoreEnum.ProductClassEnum.SWAP + "@" + positionSide + "@" + positionSide;
