@@ -287,6 +287,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             type = "MARKET";
         } else {
             type = "LIMIT";
+            parameters.put("timeInForce", timeInForce);
             parameters.put("price", submitOrderReq.getPrice());
         }
 
@@ -294,7 +295,6 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         parameters.put("side", side);
         parameters.put("positionSide", positionSide);
         parameters.put("type", type);
-        parameters.put("timeInForce", timeInForce);
         parameters.put("quantity", quantity);
         parameters.put("newClientOrderId", submitOrderReq.getOriginOrderId());
 
