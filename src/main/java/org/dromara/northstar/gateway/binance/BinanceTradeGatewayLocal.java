@@ -14,8 +14,6 @@ import org.dromara.northstar.common.event.FastEventEngine;
 import org.dromara.northstar.common.event.NorthstarEventType;
 import org.dromara.northstar.common.exception.TradeException;
 import org.dromara.northstar.common.model.GatewayDescription;
-import org.dromara.northstar.common.model.OrderRequest;
-import org.dromara.northstar.data.ISimAccountRepository;
 import org.dromara.northstar.gateway.Contract;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.TradeGateway;
@@ -29,7 +27,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
@@ -146,21 +143,30 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                 for (JSONObject position : positionList) {
                     String symbol = position.getString("symbol");
                     String positionSide = position.getString("positionSide");
-                    String positionId = symbol + "@" + ChannelType.BIAN + "@" + CoreEnum.ProductClassEnum.SWAP + "@" + positionSide + "@" + positionSide;
+                    CoreEnum.PositionDirectionEnum posDir = "LONG".equals(positionSide) ? CoreEnum.PositionDirectionEnum.PD_Long : CoreEnum.PositionDirectionEnum.PD_Short;
+
                     Contract contract = mktCenter.getContract(ChannelType.BIAN, symbol);
                     CoreField.ContractField contracted = contract.contractField();
                     //持仓数量按照最小交易精度转换
-                    int positionAmt = Double.valueOf(position.getIntValue("positionAmt") / contracted.getMultiplier()).intValue();
+                    int positionAmt = Double.valueOf(position.getDouble("positionAmt") / contracted.getMultiplier()).intValue();
 
                     CoreField.PositionField.Builder positionBuilder = CoreField.PositionField.newBuilder()
-                            .setPositionId(positionId)
-                            .setAccountId(gd.getGatewayId())
+                            .setPositionId(contracted.getUnifiedSymbol() + "@" + posDir)
                             .setGatewayId(gd.getGatewayId())
-                            .setPositionDirection("SHORT".equals(positionSide) ? CoreEnum.PositionDirectionEnum.PD_Short : CoreEnum.PositionDirectionEnum.PD_Long)
+                            .setPositionDirection(posDir)
                             .setPosition(positionAmt)
+                            .setTdPosition(positionAmt)
+                            .setYdPosition(positionAmt)
+                            .setContract(contracted)
+                            .setLastPrice(position.getDouble("entryPrice"))
                             .setPrice(position.getDouble("entryPrice"))
+                            .setOpenPrice(position.getDouble("entryPrice"))
+                            .setOpenPositionProfit(position.getDouble("unrealizedProfit"))
+                            .setOpenPriceDiff(position.getDouble("unrealizedProfit"))
+                            .setPriceDiff(position.getDouble("unrealizedProfit"))
                             .setPositionProfit(position.getDouble("unrealizedProfit"))
-                            .setUseMargin(position.getDouble("positionInitialMargin"));
+                            .setUseMargin(position.getDouble("positionInitialMargin"))
+                            .setExchangeMargin(position.getDouble("positionInitialMargin"));
                     if (positionBuilder.getUseMargin() != 0) {
                         positionBuilder.setPositionProfitRatio(positionBuilder.getPositionProfit() / positionBuilder.getUseMargin());
                         positionBuilder.setOpenPositionProfitRatio(positionBuilder.getOpenPositionProfit() / positionBuilder.getUseMargin());
