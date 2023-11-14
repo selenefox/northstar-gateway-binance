@@ -87,28 +87,9 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
         //获取账户信息
         AtomicReference<JSONObject> jsonObject = new AtomicReference<>(getAccountInformation());
-        JSONArray positions = jsonObject.get().getJSONArray("positions");
 
         //查询全部挂单
-        String result = futuresClient.account().currentAllOpenOrders(new LinkedHashMap<>());
-        List<JSONObject> openOrderList = JSON.parseArray(result).stream().map(item -> (JSONObject) item).collect(Collectors.toList());
-        //维护订单ID和symbol的map
-        for (JSONObject order : openOrderList) {
-            CoreField.ContractField contractField = mktCenter.getContract(ChannelType.BIAN, order.getString("symbol")).contractField();
-            String side = order.getString("side");
-            String positionSide = order.getString("positionSide");
-            CoreEnum.DirectionEnum dBuy = null;
-            CoreEnum.OffsetFlagEnum offsetFlag = null;
-            if ("BUY".equals(side)) {
-                dBuy = CoreEnum.DirectionEnum.D_Buy;
-                offsetFlag = CoreEnum.OffsetFlagEnum.OF_Open;
-            } else if ("SELL".equals(side)) {
-                dBuy = CoreEnum.DirectionEnum.D_Sell;
-                offsetFlag = CoreEnum.OffsetFlagEnum.OF_Close;
-            }
-            CoreField.OrderField.Builder orderBuilder = getOrderBuilder(dBuy, order, contractField, offsetFlag);
-            orderMap.put(order.getString("clientOrderId"), orderBuilder.build());
-        }
+        currentAllOpenOrders();
 
         //生成listenKey
         String listen = futuresClient.userData().createListenKey();
@@ -135,9 +116,17 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         statusReportTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                JSONObject accountInformation = getAccountInformation();
+                String result;
+                try {
+                    result = futuresClient.account().accountInformation(new LinkedHashMap<>());
+                }catch (Exception e){
+                    e.getStackTrace();
+                    result = futuresClient.account().accountInformation(new LinkedHashMap<>());
+                }
+                JSONObject accountInformation = JSON.parseObject(result);
                 //账户事件
                 getAccountField(accountInformation);
+                JSONArray positions = jsonObject.get().getJSONArray("positions");
                 List<JSONObject> positionList = positions.stream().map(item -> (JSONObject) item).filter(item -> item.getDouble("positionAmt") > 0).collect(Collectors.toList());
 
                 for (JSONObject position : positionList) {
@@ -176,6 +165,28 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             }
 
         }, 5000, 2000);
+    }
+
+    private void currentAllOpenOrders() {
+        String result = futuresClient.account().currentAllOpenOrders(new LinkedHashMap<>());
+        List<JSONObject> openOrderList = JSON.parseArray(result).stream().map(item -> (JSONObject) item).collect(Collectors.toList());
+        //维护订单ID和symbol的map
+        for (JSONObject order : openOrderList) {
+            CoreField.ContractField contractField = mktCenter.getContract(ChannelType.BIAN, order.getString("symbol")).contractField();
+            String side = order.getString("side");
+            String positionSide = order.getString("positionSide");
+            CoreEnum.DirectionEnum dBuy = null;
+            CoreEnum.OffsetFlagEnum offsetFlag = null;
+            if ("BUY".equals(side)) {
+                dBuy = CoreEnum.DirectionEnum.D_Buy;
+                offsetFlag = CoreEnum.OffsetFlagEnum.OF_Open;
+            } else if ("SELL".equals(side)) {
+                dBuy = CoreEnum.DirectionEnum.D_Sell;
+                offsetFlag = CoreEnum.OffsetFlagEnum.OF_Close;
+            }
+            CoreField.OrderField.Builder orderBuilder = getOrderBuilder(dBuy, order, contractField, offsetFlag);
+            orderMap.put(order.getString("clientOrderId"), orderBuilder.build());
+        }
     }
 
     private int listenUserStream(JSONObject jsonListenKey, AtomicReference<JSONObject> jsonObject) {
@@ -263,18 +274,6 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         String positionSide;
         String timeInForce;
         String type;
-        //开仓
-        if (CoreEnum.OffsetFlagEnum.OF_Open.getNumber() == offsetFlag.getNumber()) {
-            side = "BUY";
-        } else {
-            side = "SELL";
-        }
-        //持仓方向 或
-        if (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) {
-            positionSide = "LONG";
-        } else {
-            positionSide = "SHORT";
-        }
         //有效方式
         switch (timeCondition) {
             case TC_IOC -> timeInForce = "IOC";
@@ -282,18 +281,42 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             case TC_GTC -> timeInForce = "GTC";
             default -> timeInForce = "GTC";
         }
-        //订单种类,市价单不传价格
-        if (submitOrderReq.getPrice() == 0) {
-            type = "MARKET";
+        //开仓
+        if (CoreEnum.OffsetFlagEnum.OF_Open.getNumber() == offsetFlag.getNumber()) {
+            side = "BUY";
+            if (submitOrderReq.getPrice() == 0) {
+                type = "MARKET";
+            } else {
+                type = "LIMIT";
+                parameters.put("timeInForce", timeInForce);
+                parameters.put("price", submitOrderReq.getPrice());
+            }
+            //持仓方向 或
+            if (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) {
+                positionSide = "LONG";
+            } else {
+                positionSide = "SHORT";
+            }
+            parameters.put("positionSide", positionSide);
         } else {
-            type = "LIMIT";
-            parameters.put("timeInForce", timeInForce);
-            parameters.put("price", submitOrderReq.getPrice());
+            //平仓
+            side = "SELL";
+            if (submitOrderReq.getPrice() == 0) {
+                //止盈市价单
+                type = "TAKE_PROFIT_MARKET";
+            } else {
+                //止盈限价单
+                type = "TAKE_PROFIT";
+                parameters.put("timeInForce", timeInForce);
+                parameters.put("price", submitOrderReq.getPrice());
+            }
+            parameters.put("stopPrice", submitOrderReq.getPrice());
         }
+
+        //订单种类,市价单不传价格
 
         parameters.put("symbol", contract.getSymbol());
         parameters.put("side", side);
-        parameters.put("positionSide", positionSide);
         parameters.put("type", type);
         parameters.put("quantity", quantity);
         parameters.put("newClientOrderId", submitOrderReq.getOriginOrderId());
@@ -303,9 +326,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         log.info("[{}] 网关收到下单返回,响应:[{}]", gd.getGatewayId(), s);
 
         JSONObject orderJson = JSON.parseObject(s);
-
-        CoreField.OrderField.Builder orderBuilder = getOrderBuilder(direction, orderJson, contract, offsetFlag);
-        orderMap.put(submitOrderReq.getOriginOrderId(), orderBuilder.build());
+        //查询全部挂单
+        currentAllOpenOrders();
         return submitOrderReq.getOriginOrderId();
     }
 
