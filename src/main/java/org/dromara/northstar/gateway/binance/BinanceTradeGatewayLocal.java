@@ -281,37 +281,39 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             case TC_GTC -> timeInForce = "GTC";
             default -> timeInForce = "GTC";
         }
-        //开仓
+        // 开仓
         if (CoreEnum.OffsetFlagEnum.OF_Open.getNumber() == offsetFlag.getNumber()) {
-            side = "BUY";
-            if (submitOrderReq.getPrice() == 0) {
-                type = "MARKET";
-            } else {
-                type = "LIMIT";
+            side = (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) ? "BUY" : "SELL";
+            type = (submitOrderReq.getPrice() == 0) ? "MARKET" : "LIMIT";
+
+            if ("LIMIT".equals(type)) {
                 parameters.put("timeInForce", timeInForce);
                 parameters.put("price", submitOrderReq.getPrice());
             }
-            //持仓方向 或
-            if (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) {
-                positionSide = "LONG";
-            } else {
-                positionSide = "SHORT";
-            }
+
+            // 持仓方向
+            positionSide = (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) ? "LONG" : "SHORT";
             parameters.put("positionSide", positionSide);
         } else {
-            //平仓
-            side = "SELL";
-            if (submitOrderReq.getPrice() == 0) {
-                //止盈市价单
-                type = "TAKE_PROFIT_MARKET";
-            } else {
-                //止盈限价单
-                type = "TAKE_PROFIT";
+            // 平仓
+            side = (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) ? "SELL" : "BUY";
+            type = (submitOrderReq.getPrice() == 0) ? "MARKET" : "LIMIT";
+
+            if ("LIMIT".equals(type)) {
                 parameters.put("timeInForce", timeInForce);
                 parameters.put("price", submitOrderReq.getPrice());
             }
-            parameters.put("stopPrice", submitOrderReq.getPrice());
+
+            // 平仓方向
+            positionSide = (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) ? "SHORT" : "LONG";
+            parameters.put("positionSide", positionSide);
+
+            if ("LIMIT".equals(type)) {
+                parameters.put("stopPrice", submitOrderReq.getPrice());
+            }
         }
+
+
 
         //订单种类,市价单不传价格
 
