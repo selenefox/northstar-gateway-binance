@@ -126,7 +126,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                 JSONObject accountInformation = JSON.parseObject(result);
                 //账户事件
                 getAccountField(accountInformation);
-                JSONArray positions = jsonObject.get().getJSONArray("positions");
+                JSONArray positions = accountInformation.getJSONArray("positions");
                 List<JSONObject> positionList = positions.stream().map(item -> (JSONObject) item).filter(item -> item.getDouble("positionAmt") > 0).collect(Collectors.toList());
 
                 for (JSONObject position : positionList) {
@@ -296,21 +296,16 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             parameters.put("positionSide", positionSide);
         } else {
             // 平仓
-            side = (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) ? "SELL" : "BUY";
-            type = (submitOrderReq.getPrice() == 0) ? "MARKET" : "LIMIT";
-
-            if ("LIMIT".equals(type)) {
-                parameters.put("timeInForce", timeInForce);
-                parameters.put("price", submitOrderReq.getPrice());
-            }
+            side = (CoreEnum.DirectionEnum.D_Sell.getNumber() == direction.getNumber()) ? "SELL" : "BUY";
+            type = (submitOrderReq.getPrice() == 0) ? "TAKE_PROFIT_MARKET" : "TAKE_PROFIT";
 
             // 平仓方向
-            positionSide = (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) ? "SHORT" : "LONG";
-            parameters.put("positionSide", positionSide);
-
-            if ("LIMIT".equals(type)) {
-                parameters.put("stopPrice", submitOrderReq.getPrice());
+            positionSide = (CoreEnum.DirectionEnum.D_Sell.getNumber() == direction.getNumber()) ? "SHORT" : "LONG";
+            if ("TAKE_PROFIT".equals(type)){
+                parameters.put("price", submitOrderReq.getPrice());
             }
+            parameters.put("positionSide", positionSide);
+            parameters.put("stopPrice", submitOrderReq.getPrice());
         }
 
 
