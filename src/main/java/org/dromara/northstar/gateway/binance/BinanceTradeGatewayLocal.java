@@ -127,7 +127,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                 //账户事件
                 getAccountField(accountInformation);
                 JSONArray positions = accountInformation.getJSONArray("positions");
-                List<JSONObject> positionList = positions.stream().map(item -> (JSONObject) item).filter(item -> item.getDouble("positionAmt") > 0).collect(Collectors.toList());
+                List<JSONObject> positionList = positions.stream().map(item -> (JSONObject) item).filter(item -> item.getDouble("positionAmt") != 0).collect(Collectors.toList());
 
                 for (JSONObject position : positionList) {
                     String symbol = position.getString("symbol");
@@ -137,7 +137,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                     Contract contract = mktCenter.getContract(ChannelType.BIAN, symbol);
                     CoreField.ContractField contracted = contract.contractField();
                     //持仓数量按照最小交易精度转换
-                    int positionAmt = Double.valueOf(position.getDouble("positionAmt") / contracted.getMultiplier()).intValue();
+                    int positionAmt = Math.abs(Double.valueOf(position.getDouble("positionAmt") / contracted.getMultiplier()).intValue());
 
                     CoreField.PositionField.Builder positionBuilder = CoreField.PositionField.newBuilder()
                             .setPositionId(contracted.getUnifiedSymbol() + "@" + posDir)
@@ -282,6 +282,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             default -> timeInForce = "GTC";
         }
         // 开仓
+        //开多：买多BUY、LONG
+        //开空：卖空SELL、SHORT
         if (CoreEnum.OffsetFlagEnum.OF_Open.getNumber() == offsetFlag.getNumber()) {
             side = (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) ? "BUY" : "SELL";
             type = (submitOrderReq.getPrice() == 0) ? "MARKET" : "LIMIT";
@@ -296,20 +298,19 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             parameters.put("positionSide", positionSide);
         } else {
             // 平仓
-            side = (CoreEnum.DirectionEnum.D_Sell.getNumber() == direction.getNumber()) ? "SELL" : "BUY";
-            type = (submitOrderReq.getPrice() == 0) ? "TAKE_PROFIT_MARKET" : "TAKE_PROFIT";
+            //平空：卖空BUY、SHORT
+            //平多：卖多SELL、LONG
+            side = (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) ? "BUY" : "SELL";
+            type = (submitOrderReq.getPrice() == 0) ? "MARKET" : "LIMIT";
 
             // 平仓方向
-            positionSide = (CoreEnum.DirectionEnum.D_Sell.getNumber() == direction.getNumber()) ? "SHORT" : "LONG";
-            if ("TAKE_PROFIT".equals(type)){
+            positionSide = (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) ? "SHORT" : "LONG";
+            if ("LIMIT".equals(type)){
                 parameters.put("price", submitOrderReq.getPrice());
+                parameters.put("timeInForce", timeInForce);
             }
             parameters.put("positionSide", positionSide);
-            parameters.put("stopPrice", submitOrderReq.getPrice());
         }
-
-
-
         //订单种类,市价单不传价格
 
         parameters.put("symbol", contract.getSymbol());
@@ -340,7 +341,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         orderBuilder.setAccountId(settings.getApiKey());
         orderBuilder.setDirection(directionEnum);
         orderBuilder.setOffsetFlag(offsetFlag);
-        orderBuilder.setOrderStatus(CoreEnum.OrderStatusEnum.OS_AllTraded);
+        //orderBuilder.setOrderStatus(CoreEnum.OrderStatusEnum.OS_AllTraded);
         orderBuilder.setPrice(orderJson.getDouble("price"));
         orderBuilder.setTotalVolume(origQty);
         orderBuilder.setTradedVolume(executedQty);
