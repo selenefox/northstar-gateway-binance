@@ -18,7 +18,7 @@ import okhttp3.Request;
 public class UMWebsocketClientImpl extends WebsocketClientImpl {
 
     public UMWebsocketClientImpl() {
-        super(DefaultUrls.USDM_WS_URL);
+        super(DefaultUrls.TESTNET_WSS_URL);
     }
 
     public UMWebsocketClientImpl(String baseUrl) {

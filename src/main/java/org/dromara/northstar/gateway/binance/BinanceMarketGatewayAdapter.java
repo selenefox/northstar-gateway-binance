@@ -1,6 +1,7 @@
 package org.dromara.northstar.gateway.binance;
 
 import com.alibaba.fastjson.JSON;
+import com.binance.connector.client.impl.UMFuturesClientImpl;
 import com.binance.connector.client.impl.UMWebsocketClientImpl;
 
 import org.dromara.northstar.common.constant.ChannelType;
@@ -14,8 +15,6 @@ import org.dromara.northstar.gateway.Contract;
 import org.dromara.northstar.gateway.GatewayAbstract;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.MarketGateway;
-import org.dromara.northstar.gateway.TradeGateway;
-import org.dromara.northstar.gateway.contract.GatewayContract;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -25,15 +24,18 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Timer;
 
 import lombok.extern.slf4j.Slf4j;
 import xyz.redtorch.pb.CoreField;
 import xyz.redtorch.pb.CoreField.ContractField;
 
 @Slf4j
-public class BinanceMarketGatewayAdapter extends GatewayAbstract implements MarketGateway, TradeGateway {
+public class BinanceMarketGatewayAdapter extends GatewayAbstract implements MarketGateway{
 
     private UMWebsocketClientImpl client;
+
+    private UMFuturesClientImpl futuresClient;
 
     private FastEventEngine feEngine;
 
@@ -47,9 +49,13 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
 
     private volatile long lastUpdateTickTime = System.currentTimeMillis();
 
+    private Timer statusReportTimer;
+
     public BinanceMarketGatewayAdapter(FastEventEngine feEngine, GatewayDescription gd, IMarketCenter mktCenter) {
         super(gd, mktCenter);
+        BinanceGatewaySettings settings = (BinanceGatewaySettings) gd.getSettings();
         this.client = new UMWebsocketClientImpl();
+        this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(),settings.getSecretKey());
         this.streamIdList = new ArrayList<>();
         this.feEngine = feEngine;
         this.gd = gd;
@@ -269,13 +275,4 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
         return connState;
     }
 
-    @Override
-    public String submitOrder(CoreField.SubmitOrderReqField submitOrderReq) {
-        return null;
-    }
-
-    @Override
-    public boolean cancelOrder(CoreField.CancelOrderReqField cancelOrderReq) {
-        return false;
-    }
 }
