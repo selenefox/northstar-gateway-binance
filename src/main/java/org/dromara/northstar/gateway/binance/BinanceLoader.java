@@ -50,7 +50,7 @@ public class BinanceLoader implements CommandLineRunner {
         // 加载BIAN增加合约定义
         mktCenter.addDefinitions(binanceContractProvider.get());
         // 注册合约
-        binanceContractProvider.loadContractOptions();
+        //binanceContractProvider.loadContractOptions();
 
         mktCenter.loadContractGroup(ChannelType.BIAN);
     }

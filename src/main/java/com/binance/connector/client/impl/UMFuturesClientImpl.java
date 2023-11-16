@@ -7,7 +7,7 @@ import com.binance.connector.client.impl.um_futures.UMUserData;
 import com.binance.connector.client.impl.um_futures.UMPortfolioMargin;
 
 public class UMFuturesClientImpl extends FuturesClientImpl {
-    private static String defaultBaseUrl = DefaultUrls.USDM_PROD_URL;
+    private static String defaultBaseUrl = DefaultUrls.TESTNET_URL;
     private static String umProduct = "/fapi";
 
     public UMFuturesClientImpl() {
