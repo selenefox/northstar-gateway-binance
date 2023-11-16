@@ -20,7 +20,10 @@ import org.dromara.northstar.gateway.TradeGateway;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -34,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import cn.hutool.core.util.ObjectUtil;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import xyz.redtorch.pb.CoreEnum;
@@ -62,6 +66,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
     private UMFuturesClientImpl futuresClient;
 
     protected Map<String, CoreField.OrderField> orderMap = new HashMap<>();
+
+    protected Map<String, SubmitOrderReqField> submitOrderReqFieldMap = new HashMap<>();
 
     private UMWebsocketClientImpl websocketClient = new UMWebsocketClientImpl();
 
@@ -119,7 +125,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                 String result;
                 try {
                     result = futuresClient.account().accountInformation(new LinkedHashMap<>());
-                }catch (Exception e){
+                } catch (Exception e) {
                     e.getStackTrace();
                     result = futuresClient.account().accountInformation(new LinkedHashMap<>());
                 }
@@ -235,6 +241,73 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     //订单/交易 更新推送
     private JSONObject orderTradeUpdate(JSONObject json) {
+        JSONObject o = json.getJSONObject("o");
+        //订单当前状态
+        String X = o.getString("X");
+        //订单id
+        String c = o.getString("c");
+        String s = o.getString("s");
+        //成交时间
+        Long T = o.getLong("T");
+        //成交数量
+        Double l = o.getDouble("l");
+        Double L = o.getDouble("L");
+        CoreField.ContractField contract = mktCenter.getContract(ChannelType.BIAN, s).contractField();
+
+        LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(T), ZoneId.systemDefault()).withSecond(0).withNano(0);
+        String actionTime = dateTime.format(DateTimeConstant.T_FORMAT_WITH_MS_INT_FORMATTER);
+        String tradingDay = dateTime.format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
+        //订单末次成交量按照最小交易精度转换
+        int volume = Math.abs(Double.valueOf(l / contract.getMultiplier()).intValue());
+
+        SubmitOrderReqField orderReq = submitOrderReqFieldMap.get(c);
+        if (ObjectUtil.isNotEmpty(orderReq)) {
+
+
+            CoreField.TradeField tradeField = CoreField.TradeField.newBuilder()
+                    .setTradeId(System.currentTimeMillis() + "")
+                    .setAccountId(orderReq.getGatewayId())
+                    .setAdapterOrderId("")
+                    .setContract(orderReq.getContract())
+                    .setTradeTimestamp(T)
+                    .setDirection(orderReq.getDirection())
+                    .setGatewayId(orderReq.getGatewayId())
+                    .setHedgeFlag(orderReq.getHedgeFlag())
+                    .setOffsetFlag(orderReq.getOffsetFlag())
+                    .setOrderId(orderReq.getOriginOrderId())
+                    .setOriginOrderId(orderReq.getOriginOrderId())
+                    .setPrice(L)
+                    .setPriceSource(CoreEnum.PriceSourceEnum.PSRC_LastPrice)
+                    .setTradeDate(tradingDay)
+                    .setTradingDay(tradingDay)
+                    .setTradeTime(actionTime)
+                    .setVolume(orderReq.getVolume())
+                    .build();
+
+            CoreField.OrderField.Builder orderField = CoreField.OrderField.newBuilder();
+
+            orderField.setOrderId(c);
+            orderField.setOriginOrderId(c);
+            orderField.setGatewayId(gd.getGatewayId());
+            orderField.setContract(contract);
+            //FILLED 全部成交
+            if (X.equals("FILLED")) {
+
+                orderField.setTradedVolume(volume);
+                orderField.setTradingDay(tradingDay);
+                orderField.setStatusMsg("全部成交");
+                orderField.setOrderStatus(CoreEnum.OrderStatusEnum.OS_AllTraded);
+                feEngine.emitEvent(NorthstarEventType.ORDER, orderField.build());
+                feEngine.emitEvent(NorthstarEventType.TRADE, tradeField);
+
+            } else if (X.equals("CANCELED")) {
+
+            } else if (X.equals("NEW")) {
+
+            } else if (X.equals("PARTIALLY_FILLED")) {
+
+            }
+        }
         return getAccountInformation();
     }
 
@@ -305,7 +378,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
             // 平仓方向
             positionSide = (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) ? "SHORT" : "LONG";
-            if ("LIMIT".equals(type)){
+            if ("LIMIT".equals(type)) {
                 parameters.put("price", submitOrderReq.getPrice());
                 parameters.put("timeInForce", timeInForce);
             }
@@ -319,6 +392,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         parameters.put("quantity", quantity);
         parameters.put("newClientOrderId", submitOrderReq.getOriginOrderId());
 
+        submitOrderReqFieldMap.put(submitOrderReq.getOriginOrderId(), submitOrderReq);
         //向币安提交订单
         String s = futuresClient.account().newOrder(parameters);
         log.info("[{}] 网关收到下单返回,响应:[{}]", gd.getGatewayId(), s);
