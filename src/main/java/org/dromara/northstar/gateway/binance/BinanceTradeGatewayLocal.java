@@ -270,6 +270,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         //订单id
         String c = o.getString("c");
         String s = o.getString("s");
+        //方向
+        String S = o.getString("S");
         //成交时间
         Long T = o.getLong("T");
         //成交数量
@@ -308,12 +310,23 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                     .setVolume(orderReq.getVolume())
                     .build();
 
+            CoreEnum.DirectionEnum dBuy = null;
+            CoreEnum.OffsetFlagEnum offsetFlag = null;
+            if ("BUY".equals(S)) {
+                dBuy = CoreEnum.DirectionEnum.D_Buy;
+                offsetFlag = CoreEnum.OffsetFlagEnum.OF_Open;
+            } else if ("SELL".equals(S)) {
+                dBuy = CoreEnum.DirectionEnum.D_Sell;
+                offsetFlag = CoreEnum.OffsetFlagEnum.OF_Close;
+            }
             CoreField.OrderField.Builder orderField = CoreField.OrderField.newBuilder();
 
             orderField.setOrderId(c);
             orderField.setOriginOrderId(c);
             orderField.setGatewayId(gd.getGatewayId());
             orderField.setContract(contract);
+            orderField.setDirection(dBuy);
+            orderField.setOffsetFlag(offsetFlag);
             //FILLED 全部成交
             if (X.equals("FILLED")) {
 
