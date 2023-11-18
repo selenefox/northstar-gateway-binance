@@ -3,6 +3,7 @@ package org.dromara.northstar.gateway.binance;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.binance.connector.client.enums.DefaultUrls;
 import com.binance.connector.client.exceptions.BinanceClientException;
 import com.binance.connector.client.exceptions.BinanceConnectorException;
 import com.binance.connector.client.impl.UMFuturesClientImpl;
@@ -29,13 +30,15 @@ public class BinanceContractProvider {
 
     private BinanceGatewaySettings settings;
 
+    UMFuturesClientImpl client;
+
     public BinanceContractProvider(BinanceGatewaySettings settings, IMarketCenter mktCenter) {
         this.mktCenter = mktCenter;
         this.settings = settings;
+        this.client = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey(), settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.TESTNET_URL);
     }
 
     public void loadContractOptions() {
-        UMFuturesClientImpl client = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey());
 
         try {
             //交易规则和交易对
@@ -79,7 +82,6 @@ public class BinanceContractProvider {
     }
 
     public List<ContractDefinition> get() {
-        UMFuturesClientImpl client = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey());
         List<ContractDefinition> contractDefs = new ArrayList<>();
         try {
             String result = client.market().exchangeInfo();

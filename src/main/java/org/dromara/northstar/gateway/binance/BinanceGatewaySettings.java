@@ -17,4 +17,7 @@ public class BinanceGatewaySettings extends DynamicParams implements GatewaySett
 
     @Setting(label = "Secret Key", order = 20, type = FieldType.TEXT)
     private String secretKey;
+
+    @Setting(label = "账户类型", type = FieldType.SELECT, options = {"实盘账户", "模拟账户"}, optionsVal = {"true", "false"}, order = 30)
+    private boolean accountType;
 }

@@ -4,6 +4,7 @@ package org.dromara.northstar.gateway.binance;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.binance.connector.client.enums.DefaultUrls;
 import com.binance.connector.client.impl.UMFuturesClientImpl;
 import com.binance.connector.client.impl.UMWebsocketClientImpl;
 
@@ -66,11 +67,11 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     private UMFuturesClientImpl futuresClient;
 
+    private UMWebsocketClientImpl websocketClient;
+
     protected Map<String, CoreField.OrderField> orderMap = new HashMap<>();
 
     protected Map<String, SubmitOrderReqField> submitOrderReqFieldMap = new HashMap<>();
-
-    private UMWebsocketClientImpl websocketClient = new UMWebsocketClientImpl();
 
     private List<Integer> streamIdList = new ArrayList<>();
 
@@ -78,7 +79,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     public BinanceTradeGatewayLocal(FastEventEngine feEngine, GatewayDescription gd, IMarketCenter mktCenter) {
         this.settings = (BinanceGatewaySettings) gd.getSettings();
-        this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey());
+        this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey(), settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.TESTNET_URL);
+        this.websocketClient = new UMWebsocketClientImpl(settings.isAccountType() ? DefaultUrls.USDM_WS_URL : DefaultUrls.TESTNET_WSS_URL);
         this.feEngine = feEngine;
         this.gd = gd;
         this.mktCenter = mktCenter;
