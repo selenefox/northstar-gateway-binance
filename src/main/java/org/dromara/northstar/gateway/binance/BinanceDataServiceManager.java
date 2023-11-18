@@ -3,6 +3,7 @@ package org.dromara.northstar.gateway.binance;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.binance.connector.client.enums.DefaultUrls;
 import com.binance.connector.client.exceptions.BinanceClientException;
 import com.binance.connector.client.exceptions.BinanceConnectorException;
 import com.binance.connector.client.impl.UMFuturesClientImpl;
@@ -11,6 +12,7 @@ import org.dromara.northstar.common.IDataServiceManager;
 import org.dromara.northstar.common.ObjectManager;
 import org.dromara.northstar.common.constant.ChannelType;
 import org.dromara.northstar.common.constant.DateTimeConstant;
+import org.dromara.northstar.common.model.GatewayDescription;
 import org.dromara.northstar.common.model.Identifier;
 import org.dromara.northstar.gateway.Gateway;
 import org.dromara.northstar.gateway.model.ContractDefinition;
@@ -47,26 +49,26 @@ public class BinanceDataServiceManager implements IDataServiceManager {
 
     String format = LocalDate.now().format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
 
-    private UMFuturesClientImpl client = new UMFuturesClientImpl();
+    private UMFuturesClientImpl client;
 
     @Override
     public List<CoreField.BarField> getMinutelyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        return getHistoricalData(contract,startDate,endDate,"1m");
+        return getHistoricalData(contract, startDate, endDate, "1m");
     }
 
     @Override
     public List<CoreField.BarField> getQuarterlyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        return getHistoricalData(contract,startDate,endDate,"15m");
+        return getHistoricalData(contract, startDate, endDate, "15m");
     }
 
     @Override
     public List<CoreField.BarField> getHourlyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        return getHistoricalData(contract,startDate,endDate,"1h");
+        return getHistoricalData(contract, startDate, endDate, "1h");
     }
 
     @Override
     public List<CoreField.BarField> getDailyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        return getHistoricalData(contract,startDate,endDate,"1d");
+        return getHistoricalData(contract, startDate, endDate, "1d");
     }
 
     @Override
@@ -76,9 +78,12 @@ public class BinanceDataServiceManager implements IDataServiceManager {
 
     @Override
     public List<CoreField.ContractField> getAllContracts(CoreEnum.ExchangeEnum exchange) {
-        UMFuturesClientImpl client = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey());
         LinkedList<CoreField.ContractField> resultList = new LinkedList<>();
         List<ContractDefinition> contractDefs = new ArrayList<>();
+        Gateway gateway = gatewayManager.get(Identifier.of(ChannelType.BIAN.toString()));
+        settings = (BinanceGatewaySettings) gateway.gatewayDescription().getSettings();
+        client = new UMFuturesClientImpl(settings.getApiKey(),settings.getSecretKey(), settings.isAccountType() ?  DefaultUrls.USDM_PROD_URL : DefaultUrls.TESTNET_URL);
+
         try {
             String result = client.market().exchangeInfo();
             JSONObject json = JSON.parseObject(result);
@@ -103,6 +108,7 @@ public class BinanceDataServiceManager implements IDataServiceManager {
         log.debug("历史行情{}数据：{}，{} -> {}", interval, contract.getUnifiedSymbol(), startDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER), endDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER));
         Gateway gateway = gatewayManager.get(Identifier.of(ChannelType.BIAN.toString()));
         settings = (BinanceGatewaySettings) gateway.gatewayDescription().getSettings();
+        client = new UMFuturesClientImpl(settings.getApiKey(),settings.getSecretKey(), settings.isAccountType() ?  DefaultUrls.USDM_PROD_URL : DefaultUrls.TESTNET_URL);
 
         LocalDateTime dateTime = null;
         String actionTime = "";
