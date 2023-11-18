@@ -41,6 +41,19 @@ public class BinanceContractProvider {
     public void loadContractOptions() {
 
         try {
+
+            //查询持仓模式
+            String positionMode = client.account().getCurrentPositionMode(new LinkedHashMap<>());
+            JSONObject positionModeJson = JSON.parseObject(positionMode);
+
+            Boolean dualSidePosition = positionModeJson.getBoolean("dualSidePosition");
+            //单向持仓模式需要修改为双向持仓模式
+            if (!dualSidePosition){
+                LinkedHashMap<String, Object> parameters = new LinkedHashMap<>();
+                parameters.put("dualSidePosition", "true");
+                client.account().changePositionModeTrade(parameters);
+            }
+
             //交易规则和交易对
             String result = client.market().exchangeInfo();
             //账户信息V2
