@@ -276,8 +276,11 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         String S = o.getString("S");
         //成交时间
         Long T = o.getLong("T");
-        //成交数量
+        //订单原始数量
+        Double q = o.getDouble("q");
+        //订单末次成交量
         Double l = o.getDouble("l");
+        //订单末次成交价格
         Double L = o.getDouble("L");
         CoreField.ContractField contract = mktCenter.getContract(ChannelType.BIAN, s).contractField();
 
@@ -286,7 +289,9 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         String tradingDay = dateTime.format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
         actionTime = LocalTime.parse(actionTime, DateTimeConstant.T_FORMAT_WITH_MS_INT_FORMATTER).format(DateTimeConstant.T_FORMAT_FORMATTER);
         //订单末次成交量按照最小交易精度转换
-        int volume = Math.abs(Double.valueOf(l / contract.getMultiplier()).intValue());
+        int executedQty = Math.abs(Double.valueOf(l / contract.getMultiplier()).intValue());
+        //订单原始数量
+        int origQty = Math.abs(Double.valueOf(q / contract.getMultiplier()).intValue());
 
         SubmitOrderReqField orderReq = submitOrderReqFieldMap.get(c);
         if (ObjectUtil.isNotEmpty(orderReq)) {
@@ -329,23 +334,37 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             orderField.setContract(contract);
             orderField.setDirection(dBuy);
             orderField.setOffsetFlag(offsetFlag);
+            orderField.setPrice(L);
+            orderField.setTotalVolume(origQty);
+            orderField.setTradedVolume(executedQty);
+            orderField.setTradingDay(tradingDay);
             //FILLED 全部成交
             if (X.equals("FILLED")) {
-
-                orderField.setTradedVolume(volume);
-                orderField.setTradingDay(tradingDay);
                 orderField.setStatusMsg("全部成交");
                 orderField.setOrderStatus(CoreEnum.OrderStatusEnum.OS_AllTraded);
                 feEngine.emitEvent(NorthstarEventType.ORDER, orderField.build());
                 feEngine.emitEvent(NorthstarEventType.TRADE, tradeField);
 
             } else if (X.equals("CANCELED")) {
+                orderField.setStatusMsg("已撤单");
+                orderField.setOrderStatus(CoreEnum.OrderStatusEnum.OS_Canceled);
+                orderField.setCancelTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
+                orderField.setUpdateTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
+                feEngine.emitEvent(NorthstarEventType.ORDER, orderField.build());
 
             } else if (X.equals("NEW")) {
+                //储存挂单信息
+                orderMap.put(c, orderField.build());
+
+                orderField.setStatusMsg("已报单").setOrderStatus(CoreEnum.OrderStatusEnum.OS_Unknown);
+                orderField.setCancelTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
+                orderField.setUpdateTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
+                feEngine.emitEvent(NorthstarEventType.ORDER, orderField.build());
 
             } else if (X.equals("PARTIALLY_FILLED")) {
 
             }
+            log.info("[{}] 订单反馈：{} {} {} {} {}", orderField.getGatewayId(), orderField.getOrderDate(), orderField.getUpdateTime(), orderField.getOriginOrderId(), orderField.getOrderStatus(), orderField.getStatusMsg());
         }
         return getAccountInformation();
     }
@@ -438,7 +457,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
         JSONObject orderJson = JSON.parseObject(s);
         //查询全部挂单
-        currentAllOpenOrders();
+        //currentAllOpenOrders();
         return submitOrderReq.getOriginOrderId();
     }
 
@@ -482,14 +501,6 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         parameters.put("symbol", symbol);
         parameters.put("origClientOrderId", cancelOrderReq.getOriginOrderId());
         futuresClient.account().cancelOrder(parameters);
-        CoreField.OrderField.Builder builder = order.toBuilder()
-                .setStatusMsg("已撤单")
-                .setOrderStatus(CoreEnum.OrderStatusEnum.OS_Canceled)
-                .setCancelTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER))
-                .setUpdateTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
-
-        feEngine.emitEvent(NorthstarEventType.ORDER, builder.build());
-        log.info("[{}] 订单反馈：{} {} {} {} {}", order.getGatewayId(), order.getOrderDate(), order.getUpdateTime(), order.getOriginOrderId(), order.getOrderStatus(), order.getStatusMsg());
         return true;
     }
 
