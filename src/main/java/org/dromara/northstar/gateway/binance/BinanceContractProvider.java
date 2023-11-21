@@ -30,12 +30,15 @@ public class BinanceContractProvider {
 
     private BinanceGatewaySettings settings;
 
+    private BinanceDataServiceManager dataMgr;
+
     UMFuturesClientImpl client;
 
-    public BinanceContractProvider(BinanceGatewaySettings settings, IMarketCenter mktCenter) {
+    public BinanceContractProvider(BinanceGatewaySettings settings, IMarketCenter mktCenter, BinanceDataServiceManager dataMgr) {
         this.mktCenter = mktCenter;
         this.settings = settings;
-        this.client = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey(), settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.TESTNET_URL);
+        this.dataMgr = dataMgr;
+        this.client = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey(), settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
     }
 
     public void loadContractOptions() {
@@ -84,7 +87,7 @@ public class BinanceContractProvider {
                 //计算多头空头保证金率
                 obj.put("longMarginRatio", 1 / longSymbol.getDoubleValue("leverage"));
                 obj.put("shortMarginRatio", 1 / shortSymbol.getDoubleValue("leverage"));
-                mktCenter.addInstrument(new BinanceContract(obj));
+                mktCenter.addInstrument(new BinanceContract(obj, dataMgr));
             }
         } catch (BinanceConnectorException e) {
             log.error("fullErrMessage: {}", e.getMessage(), e);
@@ -102,7 +105,7 @@ public class BinanceContractProvider {
             JSONArray symbols = json.getJSONArray("symbols");
             for (int i = 0; i < symbols.size(); i++) {
                 JSONObject obj = symbols.getJSONObject(i);
-                BinanceContract contract = new BinanceContract(obj);
+                BinanceContract contract = new BinanceContract(obj, dataMgr);
                 ContractDefinition cnFtTt1 = ContractDefinition.builder().name(contract.name()).exchange(contract.exchange()).productClass(contract.productClass())
                         .symbolPattern(Pattern.compile("^.*$")).tradeTimeType("CN_FT_TT1").commissionRate(3 / 10000D).build();
                 contractDefs.add(cnFtTt1);

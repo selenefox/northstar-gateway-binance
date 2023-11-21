@@ -29,7 +29,7 @@ public class BinanceGatewayFactory implements GatewayFactory {
         gatewayDescription.setSettings(settings);
         if (gatewayDescription.getGatewayUsage() == GatewayUsage.MARKET_DATA) {
             // 注册合约
-            new BinanceContractProvider(settings, mktCenter).loadContractOptions();
+            new BinanceContractProvider(settings, mktCenter, dataMgr).loadContractOptions();
             return new BinanceMarketGatewayAdapter(fastEventEngine, gatewayDescription, mktCenter);
         }
         return new BinanceTradeGatewayLocal(fastEventEngine, gatewayDescription, mktCenter);

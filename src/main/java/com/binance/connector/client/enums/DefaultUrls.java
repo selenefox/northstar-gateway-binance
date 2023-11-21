@@ -1,8 +1,8 @@
 package com.binance.connector.client.enums;
 
 public final class DefaultUrls {
-    public static final String TESTNET_URL = "https://testnet.binancefuture.com";
-    public static final String TESTNET_WSS_URL = "wss://stream.binancefuture.com";
+    public static final String USDM_UAT_URL = "https://testnet.binancefuture.com";
+    public static final String USDM_UAT_WSS_URL = "wss://stream.binancefuture.com";
     //USD-M Futures
     public static final String USDM_PROD_URL = "https://fapi.binance.com";
     public static final String USDM_WS_URL = "wss://fstream.binance.com";

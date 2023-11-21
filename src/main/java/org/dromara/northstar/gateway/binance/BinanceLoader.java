@@ -46,7 +46,7 @@ public class BinanceLoader implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        gatewayMetaProvider.add(ChannelType.BIAN, new BinanceGatewaySettings(), binanceGatewayFactory, dsMgr);
+        gatewayMetaProvider.add(ChannelType.BIAN, new BinanceGatewaySettings(), binanceGatewayFactory);
         // 加载BIAN增加合约定义
         mktCenter.addDefinitions(binanceContractProvider.get());
         // 注册合约

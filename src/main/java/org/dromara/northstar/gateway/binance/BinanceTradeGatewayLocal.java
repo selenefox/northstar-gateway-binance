@@ -79,8 +79,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     public BinanceTradeGatewayLocal(FastEventEngine feEngine, GatewayDescription gd, IMarketCenter mktCenter) {
         this.settings = (BinanceGatewaySettings) gd.getSettings();
-        this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey(), settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.TESTNET_URL);
-        this.websocketClient = new UMWebsocketClientImpl(settings.isAccountType() ? DefaultUrls.USDM_WS_URL : DefaultUrls.TESTNET_WSS_URL);
+        this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey(), settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
+        this.websocketClient = new UMWebsocketClientImpl(settings.isAccountType() ? DefaultUrls.USDM_WS_URL : DefaultUrls.USDM_UAT_WSS_URL);
         this.feEngine = feEngine;
         this.gd = gd;
         this.mktCenter = mktCenter;
