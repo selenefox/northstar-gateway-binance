@@ -1,5 +1,6 @@
 package org.dromara.northstar.gateway.binance;
 
+import org.dromara.northstar.common.IDataSource;
 import org.dromara.northstar.common.constant.ChannelType;
 import org.dromara.northstar.common.model.Identifier;
 import org.dromara.northstar.gateway.Instrument;
@@ -21,8 +22,11 @@ public class BinanceContract implements Instrument {
 
     private ContractDefinition contractDef;
 
-    public BinanceContract(JSONObject json) {
+    private IDataSource dataSrc;
+
+    public BinanceContract(JSONObject json, IDataSource dataSrc) {
         this.json = json;
+        this.dataSrc = dataSrc;
     }
 
     @Override
@@ -58,6 +62,10 @@ public class BinanceContract implements Instrument {
     @Override
     public void setContractDefinition(ContractDefinition contractDef) {
         this.contractDef = contractDef;
+    }
+    @Override
+    public IDataSource dataSource() {
+        return dataSrc;
     }
 
     /**

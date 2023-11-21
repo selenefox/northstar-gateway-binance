@@ -8,20 +8,21 @@ import com.binance.connector.client.exceptions.BinanceClientException;
 import com.binance.connector.client.exceptions.BinanceConnectorException;
 import com.binance.connector.client.impl.UMFuturesClientImpl;
 
-import org.dromara.northstar.common.IDataServiceManager;
+import org.dromara.northstar.common.IDataSource;
 import org.dromara.northstar.common.ObjectManager;
 import org.dromara.northstar.common.constant.ChannelType;
 import org.dromara.northstar.common.constant.DateTimeConstant;
-import org.dromara.northstar.common.model.GatewayDescription;
 import org.dromara.northstar.common.model.Identifier;
 import org.dromara.northstar.gateway.Gateway;
 import org.dromara.northstar.gateway.model.ContractDefinition;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Date;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -40,7 +41,7 @@ import xyz.redtorch.pb.CoreField.BarField;
  * @date 2023/9/20 17:38
  */
 @Slf4j
-public class BinanceDataServiceManager implements IDataServiceManager {
+public class BinanceDataServiceManager implements IDataSource {
 
     @Autowired
     private BinanceGatewaySettings settings;
@@ -48,6 +49,9 @@ public class BinanceDataServiceManager implements IDataServiceManager {
     private ObjectManager<Gateway> gatewayManager;
 
     String format = LocalDate.now().format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
+
+    SimpleDateFormat sdf = new SimpleDateFormat("HHmmssSSS");
+
 
     private UMFuturesClientImpl client;
 
@@ -80,9 +84,10 @@ public class BinanceDataServiceManager implements IDataServiceManager {
     public List<CoreField.ContractField> getAllContracts(CoreEnum.ExchangeEnum exchange) {
         LinkedList<CoreField.ContractField> resultList = new LinkedList<>();
         List<ContractDefinition> contractDefs = new ArrayList<>();
-        Gateway gateway = gatewayManager.get(Identifier.of(ChannelType.BIAN.toString()));
-        settings = (BinanceGatewaySettings) gateway.gatewayDescription().getSettings();
-        client = new UMFuturesClientImpl(settings.getApiKey(),settings.getSecretKey(), settings.isAccountType() ?  DefaultUrls.USDM_PROD_URL : DefaultUrls.TESTNET_URL);
+//        Gateway gateway = gatewayManager.get(Identifier.of(ChannelType.BIAN.toString()));
+//        settings = (BinanceGatewaySettings) gateway.gatewayDescription().getSettings();
+//        client = new UMFuturesClientImpl(settings.getApiKey(),settings.getSecretKey(), settings.isAccountType() ?  DefaultUrls.USDM_PROD_URL : DefaultUrls.TESTNET_URL);
+        client = new UMFuturesClientImpl(settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
 
         try {
             String result = client.market().exchangeInfo();
@@ -90,10 +95,11 @@ public class BinanceDataServiceManager implements IDataServiceManager {
             JSONArray symbols = json.getJSONArray("symbols");
             for (int i = 0; i < symbols.size(); i++) {
                 JSONObject obj = symbols.getJSONObject(i);
-                BinanceContract contract = new BinanceContract(obj);
+                BinanceContract contract = new BinanceContract(obj, this);
                 ContractDefinition cnFtTt1 = ContractDefinition.builder().name(contract.name()).exchange(contract.exchange()).productClass(contract.productClass())
                         .symbolPattern(Pattern.compile("^[A-Z]+@[A-Z]+@[A-Z]+@[A-Z]+$")).tradeTimeType("CN_FT_TT1").commissionRate(3 / 10000D).build();
                 contractDefs.add(cnFtTt1);
+                resultList.add(contract.contractField());
             }
         } catch (BinanceConnectorException e) {
             log.error("fullErrMessage: {}", e.getMessage(), e);
@@ -104,11 +110,16 @@ public class BinanceDataServiceManager implements IDataServiceManager {
         return resultList;
     }
 
+    @Override
+    public List<CoreEnum.ExchangeEnum> getUserAvailableExchanges() {
+        return Collections.singletonList(CoreEnum.ExchangeEnum.BINANCE);
+    }
+
     public List<CoreField.BarField> getHistoricalData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate, String interval) {
         log.debug("历史行情{}数据：{}，{} -> {}", interval, contract.getUnifiedSymbol(), startDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER), endDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER));
         Gateway gateway = gatewayManager.get(Identifier.of(ChannelType.BIAN.toString()));
         settings = (BinanceGatewaySettings) gateway.gatewayDescription().getSettings();
-        client = new UMFuturesClientImpl(settings.getApiKey(),settings.getSecretKey(), settings.isAccountType() ?  DefaultUrls.USDM_PROD_URL : DefaultUrls.TESTNET_URL);
+        client = new UMFuturesClientImpl(settings.getApiKey(),settings.getSecretKey(), settings.isAccountType() ?  DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
 
         LocalDateTime dateTime = null;
         String actionTime = "";
