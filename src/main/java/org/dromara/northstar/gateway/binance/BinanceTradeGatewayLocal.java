@@ -342,27 +342,24 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             if (X.equals("FILLED")) {
                 orderField.setStatusMsg("全部成交");
                 orderField.setOrderStatus(CoreEnum.OrderStatusEnum.OS_AllTraded);
-                feEngine.emitEvent(NorthstarEventType.ORDER, orderField.build());
-                feEngine.emitEvent(NorthstarEventType.TRADE, tradeField);
-
+                orderField.setUpdateTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
             } else if (X.equals("CANCELED")) {
                 orderField.setStatusMsg("已撤单");
                 orderField.setOrderStatus(CoreEnum.OrderStatusEnum.OS_Canceled);
                 orderField.setCancelTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
                 orderField.setUpdateTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
-                feEngine.emitEvent(NorthstarEventType.ORDER, orderField.build());
-
             } else if (X.equals("NEW")) {
                 //储存挂单信息
                 orderMap.put(c, orderField.build());
-
                 orderField.setStatusMsg("已报单").setOrderStatus(CoreEnum.OrderStatusEnum.OS_Unknown);
-                orderField.setCancelTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
+                orderField.setSuspendTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
                 orderField.setUpdateTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
-                feEngine.emitEvent(NorthstarEventType.ORDER, orderField.build());
-
             } else if (X.equals("PARTIALLY_FILLED")) {
 
+            }
+            feEngine.emitEvent(NorthstarEventType.ORDER, orderField.build());
+            if (X.equals("FILLED")) {
+                feEngine.emitEvent(NorthstarEventType.TRADE, tradeField);
             }
             log.info("[{}] 订单反馈：{} {} {} {} {}", orderField.getGatewayId(), orderField.getOrderDate(), orderField.getUpdateTime(), orderField.getOriginOrderId(), orderField.getOrderStatus(), orderField.getStatusMsg());
         }
