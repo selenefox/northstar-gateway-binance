@@ -18,10 +18,13 @@ import org.dromara.northstar.gateway.model.ContractDefinition;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.text.SimpleDateFormat;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Date;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -57,22 +60,38 @@ public class BinanceDataServiceManager implements IDataSource {
 
     @Override
     public List<CoreField.BarField> getMinutelyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        return getHistoricalData(contract, startDate, endDate, "1m");
+        List<CoreField.BarField> allData = new ArrayList<>();
+
+        LocalDateTime startTime = startDate.atStartOfDay();
+        LocalDateTime endTime = endDate.atTime(LocalTime.MAX);
+
+        long minutes = Duration.between(startTime, endTime).toMinutes();
+
+        for (int i = 0; i <= minutes; i += 1000) {
+            LocalDateTime currentStartTime = startTime.plusMinutes(i);
+            LocalDateTime currentEndTime = currentStartTime.plusMinutes(999);
+
+            Instant instantStart = currentStartTime.atZone(ZoneId.of("Asia/Shanghai")).toInstant();
+            Instant instantEnd = currentEndTime.atZone(ZoneId.of("Asia/Shanghai")).toInstant();
+            List<CoreField.BarField> data = getHistoricalData(contract, instantStart.toEpochMilli(), instantEnd.toEpochMilli(), "1m");
+            allData.addAll(data);
+        }
+        return allData;
     }
 
     @Override
     public List<CoreField.BarField> getQuarterlyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        return getHistoricalData(contract, startDate, endDate, "15m");
+        return getHistoricalData(contract, startDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), endDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), "15m");
     }
 
     @Override
     public List<CoreField.BarField> getHourlyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        return getHistoricalData(contract, startDate, endDate, "1h");
+        return getHistoricalData(contract, startDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), endDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), "1h");
     }
 
     @Override
     public List<CoreField.BarField> getDailyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        return getHistoricalData(contract, startDate, endDate, "1d");
+        return getHistoricalData(contract, startDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), endDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), "1d");
     }
 
     @Override
@@ -115,11 +134,11 @@ public class BinanceDataServiceManager implements IDataSource {
         return Collections.singletonList(CoreEnum.ExchangeEnum.BINANCE);
     }
 
-    public List<CoreField.BarField> getHistoricalData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate, String interval) {
-        log.debug("历史行情{}数据：{}，{} -> {}", interval, contract.getUnifiedSymbol(), startDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER), endDate.format(DateTimeConstant.D_FORMAT_INT_FORMATTER));
+    public List<CoreField.BarField> getHistoricalData(CoreField.ContractField contract, long startDate, long endDate, String interval) {
+        log.debug("历史行情{}数据：{}，{} -> {}", interval, contract.getUnifiedSymbol(), startDate, endDate);
         Gateway gateway = gatewayManager.get(Identifier.of(ChannelType.BIAN.toString()));
         settings = (BinanceGatewaySettings) gateway.gatewayDescription().getSettings();
-        client = new UMFuturesClientImpl(settings.getApiKey(),settings.getSecretKey(), settings.isAccountType() ?  DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
+        client = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey(), settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
 
         LocalDateTime dateTime = null;
         String actionTime = "";
@@ -130,6 +149,7 @@ public class BinanceDataServiceManager implements IDataSource {
         parameters.put("interval", interval);
         parameters.put("startTime", startDate);
         parameters.put("endTime", endDate);
+        parameters.put("limit", 1500);
         String result = client.market().klines(parameters);
         List<String[]> klinesList = JSON.parseArray(result, String[].class);
         double quantityPrecision = 1 / Math.pow(10, contract.getQuantityPrecision());
