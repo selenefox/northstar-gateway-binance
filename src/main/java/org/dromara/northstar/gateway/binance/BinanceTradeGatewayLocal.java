@@ -195,7 +195,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                     return futuresClient.account().accountInformation(new LinkedHashMap<>());
                 }
             }
-        }, 5000, 2000);
+        }, 5000, 3000);
     }
 
     private void currentAllOpenOrders() {
