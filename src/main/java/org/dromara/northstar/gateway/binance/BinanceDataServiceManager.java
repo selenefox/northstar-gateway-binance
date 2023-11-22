@@ -24,10 +24,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.util.Date;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -76,6 +75,7 @@ public class BinanceDataServiceManager implements IDataSource {
             List<CoreField.BarField> data = getHistoricalData(contract, instantStart.toEpochMilli(), instantEnd.toEpochMilli(), "1m");
             allData.addAll(data);
         }
+        allData.sort(Comparator.comparing(BarField::getActionTimestamp).reversed());
         return allData;
     }
 
@@ -157,13 +157,13 @@ public class BinanceDataServiceManager implements IDataSource {
         for (String[] s : klinesList) {
             // 将时间戳转换为LocalDateTime对象
             dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(Long.parseLong(s[0])), ZoneId.systemDefault());
-            actionTime = dateTime.format(DateTimeConstant.T_FORMAT_WITH_MS_INT_FORMATTER);
+            actionTime = dateTime.format(DateTimeConstant.T_FORMAT_FORMATTER);
 
             double volume = Double.parseDouble(s[5]) / quantityPrecision;
             double turnover = Double.parseDouble(s[7]);
             double numTrades = Double.parseDouble(s[8]);
             barFieldList.addFirst(BarField.newBuilder()
-                    .setUnifiedSymbol(contract.getSymbol())
+                    .setUnifiedSymbol(contract.getUnifiedSymbol())
                     .setGatewayId(contract.getGatewayId())
                     .setTradingDay(format)
                     .setActionDay(format)
