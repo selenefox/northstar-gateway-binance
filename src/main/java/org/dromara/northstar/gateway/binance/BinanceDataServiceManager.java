@@ -142,6 +142,7 @@ public class BinanceDataServiceManager implements IDataSource {
 
         LocalDateTime dateTime = null;
         String actionTime = "";
+        String actionDay = "";
 
         LinkedList<CoreField.BarField> barFieldList = new LinkedList<>();
         LinkedHashMap<String, Object> parameters = new LinkedHashMap<>();
@@ -158,6 +159,7 @@ public class BinanceDataServiceManager implements IDataSource {
             // 将时间戳转换为LocalDateTime对象
             dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(Long.parseLong(s[0])), ZoneId.systemDefault());
             actionTime = dateTime.format(DateTimeConstant.T_FORMAT_FORMATTER);
+            actionDay = dateTime.format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
 
             double volume = Double.parseDouble(s[5]) / quantityPrecision;
             double turnover = Double.parseDouble(s[7]);
@@ -165,8 +167,8 @@ public class BinanceDataServiceManager implements IDataSource {
             barFieldList.addFirst(BarField.newBuilder()
                     .setUnifiedSymbol(contract.getUnifiedSymbol())
                     .setGatewayId(contract.getGatewayId())
-                    .setTradingDay(format)
-                    .setActionDay(format)
+                    .setTradingDay(actionDay)
+                    .setActionDay(actionDay)
                     .setActionTime(actionTime)
                     .setActionTimestamp(Long.parseLong(s[0]))
                     .setOpenPrice(Double.valueOf(s[1]))
