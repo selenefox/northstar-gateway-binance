@@ -1,6 +1,7 @@
 package org.dromara.northstar.gateway.binance;
 
 import com.alibaba.fastjson.JSON;
+import com.binance.connector.client.enums.DefaultUrls;
 import com.binance.connector.client.impl.UMFuturesClientImpl;
 import com.binance.connector.client.impl.UMWebsocketClientImpl;
 
@@ -54,8 +55,8 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
     public BinanceMarketGatewayAdapter(FastEventEngine feEngine, GatewayDescription gd, IMarketCenter mktCenter) {
         super(gd, mktCenter);
         BinanceGatewaySettings settings = (BinanceGatewaySettings) gd.getSettings();
-        this.client = new UMWebsocketClientImpl();
-        this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(),settings.getSecretKey());
+        this.client = new UMWebsocketClientImpl(settings.isAccountType() ?  DefaultUrls.USDM_WS_URL : DefaultUrls.USDM_UAT_WSS_URL);
+        this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(),settings.getSecretKey(), settings.isAccountType() ?  DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
         this.streamIdList = new ArrayList<>();
         this.feEngine = feEngine;
         this.gd = gd;
