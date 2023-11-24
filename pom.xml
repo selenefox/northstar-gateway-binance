@@ -47,7 +47,7 @@
             <dependency>
                 <groupId>org.dromara</groupId>
                 <artifactId>northstar</artifactId>
-                <version>6.2.2.Final</version>
+                <version>6.3.0.RC</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

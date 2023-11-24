@@ -24,7 +24,7 @@ public class BinanceConfig {
     }
 
     @Bean
-    BinanceDataServiceManager binanceDataServiceManager(RestTemplate restTemplate) {
+    BinanceDataServiceManager binanceDataServiceManager() {
         return new BinanceDataServiceManager();
     }
 
