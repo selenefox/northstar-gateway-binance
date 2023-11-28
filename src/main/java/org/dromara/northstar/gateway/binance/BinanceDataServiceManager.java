@@ -81,17 +81,17 @@ public class BinanceDataServiceManager implements IDataSource {
 
     @Override
     public List<CoreField.BarField> getQuarterlyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        return getHistoricalData(contract, startDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), endDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), "15m");
+        return getHistoricalData(contract, startDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), endDate.atTime(LocalTime.MAX).atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), "15m");
     }
 
     @Override
     public List<CoreField.BarField> getHourlyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        return getHistoricalData(contract, startDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), endDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), "1h");
+        return getHistoricalData(contract, startDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), endDate.atTime(LocalTime.MAX).atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), "1h");
     }
 
     @Override
     public List<CoreField.BarField> getDailyData(CoreField.ContractField contract, LocalDate startDate, LocalDate endDate) {
-        return getHistoricalData(contract, startDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), endDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), "1d");
+        return getHistoricalData(contract, startDate.atStartOfDay().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), endDate.atTime(LocalTime.MAX).atZone(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli(), "1d");
     }
 
     @Override
