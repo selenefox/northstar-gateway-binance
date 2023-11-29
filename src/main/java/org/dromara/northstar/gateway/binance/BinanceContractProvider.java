@@ -51,7 +51,7 @@ public class BinanceContractProvider {
 
             Boolean dualSidePosition = positionModeJson.getBoolean("dualSidePosition");
             //单向持仓模式需要修改为双向持仓模式
-            if (!dualSidePosition){
+            if (!dualSidePosition) {
                 LinkedHashMap<String, Object> parameters = new LinkedHashMap<>();
                 parameters.put("dualSidePosition", "true");
                 client.account().changePositionModeTrade(parameters);

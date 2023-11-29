@@ -32,7 +32,7 @@ import xyz.redtorch.pb.CoreField;
 import xyz.redtorch.pb.CoreField.ContractField;
 
 @Slf4j
-public class BinanceMarketGatewayAdapter extends GatewayAbstract implements MarketGateway{
+public class BinanceMarketGatewayAdapter extends GatewayAbstract implements MarketGateway {
 
     private UMWebsocketClientImpl client;
 
@@ -55,8 +55,8 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
     public BinanceMarketGatewayAdapter(FastEventEngine feEngine, GatewayDescription gd, IMarketCenter mktCenter) {
         super(gd, mktCenter);
         BinanceGatewaySettings settings = (BinanceGatewaySettings) gd.getSettings();
-        this.client = new UMWebsocketClientImpl(settings.isAccountType() ?  DefaultUrls.USDM_WS_URL : DefaultUrls.USDM_UAT_WSS_URL);
-        this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(),settings.getSecretKey(), settings.isAccountType() ?  DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
+        this.client = new UMWebsocketClientImpl(settings.isAccountType() ? DefaultUrls.USDM_WS_URL : DefaultUrls.USDM_UAT_WSS_URL);
+        this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey(), settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
         this.streamIdList = new ArrayList<>();
         this.feEngine = feEngine;
         this.gd = gd;
@@ -108,6 +108,7 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
 
         return true;
     }
+
     /**
      * <br>Description:获取k线组装BAR数据
      * <br>Author: 李嘉豪
