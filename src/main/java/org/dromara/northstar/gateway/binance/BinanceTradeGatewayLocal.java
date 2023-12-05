@@ -192,6 +192,11 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                     return futuresClient.account().accountInformation(new LinkedHashMap<>());
                 } catch (Exception e) {
                     e.printStackTrace();
+                    try {
+                        Thread.sleep(3000);
+                    } catch (Exception exception) {
+                        exception.printStackTrace();
+                    }
                     return futuresClient.account().accountInformation(new LinkedHashMap<>());
                 }
             }
