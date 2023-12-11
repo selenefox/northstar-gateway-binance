@@ -165,6 +165,7 @@ public class BinanceDataServiceManager implements IDataSource {
             double turnover = Double.parseDouble(s[7]);
             double numTrades = Double.parseDouble(s[8]);
             barFieldList.addFirst(Bar.builder()
+                    .contract(contract)
                     .gatewayId(contract.gatewayId())
                     .tradingDay(tradingDay)
                     .actionDay(actionDay)

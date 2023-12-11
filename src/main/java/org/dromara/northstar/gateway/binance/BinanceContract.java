@@ -84,7 +84,7 @@ public class BinanceContract implements Instrument {
                 .exchange(exchange())
                 .productClass(productClass())
                 .lastTradeDate(lastTradeDate)
-                .priceTick(json.getDoubleValue("pricePrecision"))
+                .priceTick(1 / Math.pow(10, json.getIntValue("pricePrecision")))
                 .pricePrecision(json.getIntValue("pricePrecision"))
                 .quantityPrecision(json.getIntValue("quantityPrecision"))
                 .multiplier(1 / Math.pow(10, json.getIntValue("quantityPrecision")))

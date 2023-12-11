@@ -12,6 +12,7 @@ import org.dromara.northstar.common.constant.TickType;
 import org.dromara.northstar.common.event.FastEventEngine;
 import org.dromara.northstar.common.event.NorthstarEventType;
 import org.dromara.northstar.common.model.GatewayDescription;
+import org.dromara.northstar.common.model.core.Bar;
 import org.dromara.northstar.common.model.core.Contract;
 import org.dromara.northstar.common.model.core.Tick;
 import org.dromara.northstar.gateway.IMarketCenter;
@@ -204,7 +205,6 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                     Instant e = Instant.ofEpochMilli(actionTimestamp);
                     LocalTime actionTime = e.atZone(ZoneId.systemDefault()).toLocalTime();
                     LocalDate tradingDay = e.atZone(ZoneId.systemDefault()).toLocalDate();
-                    LocalDate actionDay = LocalDate.now();
 
                     double volume = Double.parseDouble((String) data.get("v"));
                     double Q = Double.parseDouble((String) data.get("Q"));
@@ -213,7 +213,7 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                     Tick tick = Tick.builder()
                             .contract(contract)
                             .tradingDay(tradingDay)
-                            .actionDay(actionDay)
+                            .actionDay(tradingDay)
                             .actionTime(actionTime)
                             .actionTimestamp(actionTimestamp)
                             .avgPrice(Double.valueOf(String.valueOf(data.get("w"))))
@@ -248,30 +248,29 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                     if (!(Boolean) k.get("x")) {
                         return;
                     }
-                    LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli((Long) data.get("E")), ZoneId.systemDefault()).withSecond(0).withNano(0);
-                    String actionTime = dateTime.format(DateTimeConstant.T_FORMAT_FORMATTER);
-                    String tradingDay = dateTime.format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
+                    Long actionTimestamp = (Long) data.get("E");
+                    Instant e = Instant.ofEpochMilli(actionTimestamp);
+                    LocalTime actionTime = e.atZone(ZoneId.systemDefault()).toLocalTime();
+                    LocalDate tradingDay = e.atZone(ZoneId.systemDefault()).toLocalDate();
                     double volume = Double.parseDouble((String) k.get("v")) / quantityPrecision; //成交量精度
                     double turnover = Double.parseDouble((String) k.get("q"));
                     Long numTrades = Long.valueOf(String.valueOf(k.get("n")));
-                    CoreField.BarField bar = CoreField.BarField.newBuilder()
-                            .setUnifiedSymbol(contract.unifiedSymbol())
-                            .setGatewayId(gatewayId)
-                            .setTradingDay(tradingDay)
-                            .setActionDay(tradingDay)
-                            .setActionTime(actionTime)
-                            .setActionTimestamp(dateTime.toInstant(ZoneOffset.ofHours(8)).toEpochMilli())
-                            .setOpenPrice(Double.valueOf(String.valueOf(k.get("o"))))
-                            .setHighPrice(Double.valueOf(String.valueOf(k.get("h"))))
-                            .setLowPrice(Double.valueOf(String.valueOf(k.get("l"))))
-                            .setClosePrice(Double.valueOf(String.valueOf(k.get("c"))))
-                            .setVolume((long) volume)
-                            .setVolumeDelta((long) volume)
-                            .setTurnover(turnover)
-                            .setTurnoverDelta(turnover)
-                            .setNumTrades(numTrades)
-                            .setNumTradesDelta(numTrades)
-                            .setChannelType(ChannelType.BIAN.toString())
+                    Bar bar = Bar.builder()
+                            .contract(contract)
+                            .gatewayId(gatewayId)
+                            .tradingDay(tradingDay)
+                            .actionDay(tradingDay)
+                            .actionTime(actionTime)
+                            .actionTimestamp(actionTimestamp)
+                            .openPrice(Double.valueOf(String.valueOf(k.get("o"))))
+                            .highPrice(Double.valueOf(String.valueOf(k.get("h"))))
+                            .lowPrice(Double.valueOf(String.valueOf(k.get("l"))))
+                            .closePrice(Double.valueOf(String.valueOf(k.get("c"))))
+                            .volume((long) volume)
+                            .volumeDelta((long) volume)
+                            .turnover(turnover)
+                            .turnoverDelta(turnover)
+                            .channelType(ChannelType.BIAN)
                             .build();
                     feEngine.emitEvent(NorthstarEventType.BAR, bar);
                 }
