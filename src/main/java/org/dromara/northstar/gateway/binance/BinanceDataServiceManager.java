@@ -36,8 +36,6 @@ import java.util.regex.Pattern;
 
 import lombok.extern.slf4j.Slf4j;
 import xyz.redtorch.pb.CoreEnum;
-import xyz.redtorch.pb.CoreField;
-import xyz.redtorch.pb.CoreField.BarField;
 
 /**
  * @author 李嘉豪
