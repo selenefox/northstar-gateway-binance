@@ -14,6 +14,7 @@ import org.dromara.northstar.common.event.FastEventEngine;
 import org.dromara.northstar.common.event.NorthstarEventType;
 import org.dromara.northstar.common.exception.TradeException;
 import org.dromara.northstar.common.model.GatewayDescription;
+import org.dromara.northstar.common.model.core.Account;
 import org.dromara.northstar.common.model.core.Contract;
 import org.dromara.northstar.common.model.core.Order;
 import org.dromara.northstar.common.model.core.SubmitOrderReq;
@@ -250,18 +251,17 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     @NotNull
     private void getAccountField(JSONObject jsonObject) {
-        CoreField.AccountField accountBuilder = CoreField.AccountField.newBuilder()
-                .setAccountId(gd.getGatewayId())
-                .setAvailable(jsonObject.getDouble("availableBalance"))
-                .setBalance(jsonObject.getDouble("totalCrossWalletBalance"))
-                .setCloseProfit(jsonObject.getDouble("totalUnrealizedProfit"))
+        Account accountBuilder = Account.builder()
+                .accountId(gd.getGatewayId())
+                .available(jsonObject.getDouble("availableBalance"))
+                .balance(jsonObject.getDouble("totalCrossWalletBalance"))
+                .closeProfit(jsonObject.getDouble("totalUnrealizedProfit"))
                 //TODO，ETH/BTC期货合约将按照BUSD手续费表计。这里币安返回的feeTier是手续费等级,0=0.0200%/0.0500%(USDT-Maker / Taker),暂时写死后续处理
-                .setCommission(Double.valueOf(0.0002))
-                .setGatewayId(gd.getGatewayId())
-                .setCurrency(CoreEnum.CurrencyEnum.USD)
-                .setName("BIAN")
-                .setMargin(jsonObject.getDouble("totalInitialMargin"))
-                .setPositionProfit(jsonObject.getDouble("totalCrossUnPnl"))
+                .commission(Double.valueOf(0.0002))
+                .gatewayId(gd.getGatewayId())
+                .currency(CoreEnum.CurrencyEnum.USD)
+                .margin(jsonObject.getDouble("totalInitialMargin"))
+                .positionProfit(jsonObject.getDouble("totalCrossUnPnl"))
                 .build();
         feEngine.emitEvent(NorthstarEventType.ACCOUNT, accountBuilder);
     }

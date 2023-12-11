@@ -9,6 +9,10 @@ import org.dromara.northstar.common.model.core.Contract;
 import org.dromara.northstar.common.model.core.ContractDefinition;
 import org.dromara.northstar.gateway.Instrument;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+
 import xyz.redtorch.pb.CoreEnum.CurrencyEnum;
 import xyz.redtorch.pb.CoreEnum.ExchangeEnum;
 import xyz.redtorch.pb.CoreEnum.ProductClassEnum;
@@ -67,6 +71,8 @@ public class BinanceContract implements Instrument {
      */
     @Override
     public Contract contract() {
+        Instant e = Instant.ofEpochMilli(json.getLong("deliveryDate"));
+        LocalDate lastTradeDate = e.atZone(ZoneId.systemDefault()).toLocalDate();
 
         return Contract.builder()
                 .gatewayId(ChannelType.BIAN.toString())
@@ -77,6 +83,7 @@ public class BinanceContract implements Instrument {
                 .currency(CurrencyEnum.USD)
                 .exchange(exchange())
                 .productClass(productClass())
+                .lastTradeDate(lastTradeDate)
                 .priceTick(json.getDoubleValue("pricePrecision"))
                 .pricePrecision(json.getIntValue("pricePrecision"))
                 .quantityPrecision(json.getIntValue("quantityPrecision"))
