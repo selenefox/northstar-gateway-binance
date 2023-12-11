@@ -8,8 +8,8 @@ import com.binance.connector.client.exceptions.BinanceClientException;
 import com.binance.connector.client.exceptions.BinanceConnectorException;
 import com.binance.connector.client.impl.UMFuturesClientImpl;
 
+import org.dromara.northstar.common.model.core.ContractDefinition;
 import org.dromara.northstar.gateway.IMarketCenter;
-import org.dromara.northstar.gateway.model.ContractDefinition;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -107,7 +107,7 @@ public class BinanceContractProvider {
                 JSONObject obj = symbols.getJSONObject(i);
                 BinanceContract contract = new BinanceContract(obj, dataMgr);
                 ContractDefinition cnFtTt1 = ContractDefinition.builder().name(contract.name()).exchange(contract.exchange()).productClass(contract.productClass())
-                        .symbolPattern(Pattern.compile("^.*$")).tradeTimeType("CN_FT_TT1").commissionRate(3 / 10000D).build();
+                        .symbolPattern(Pattern.compile("^.*$")).commissionRate(3 / 10000D).build();
                 contractDefs.add(cnFtTt1);
             }
         } catch (BinanceConnectorException e) {
