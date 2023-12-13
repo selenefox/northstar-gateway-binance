@@ -159,7 +159,6 @@ public class BinanceDataServiceManager implements IDataSource {
             Instant e = Instant.ofEpochMilli(Long.parseLong(s[0]));
             actionTime = e.atZone(ZoneId.systemDefault()).toLocalTime();
             tradingDay = e.atZone(ZoneId.systemDefault()).toLocalDate();
-            LocalDate actionDay = LocalDate.now();
 
             double volume = Double.parseDouble(s[5]) / quantityPrecision;
             double turnover = Double.parseDouble(s[7]);
@@ -168,7 +167,7 @@ public class BinanceDataServiceManager implements IDataSource {
                     .contract(contract)
                     .gatewayId(contract.gatewayId())
                     .tradingDay(tradingDay)
-                    .actionDay(actionDay)
+                    .actionDay(tradingDay)
                     .actionTime(actionTime)
                     .actionTimestamp(Long.parseLong(s[0]))
                     .openPrice(Double.valueOf(s[1]))
