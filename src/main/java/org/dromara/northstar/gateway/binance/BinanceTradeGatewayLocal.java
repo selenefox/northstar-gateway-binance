@@ -17,6 +17,7 @@ import org.dromara.northstar.common.model.GatewayDescription;
 import org.dromara.northstar.common.model.core.Account;
 import org.dromara.northstar.common.model.core.Contract;
 import org.dromara.northstar.common.model.core.Order;
+import org.dromara.northstar.common.model.core.Position;
 import org.dromara.northstar.common.model.core.SubmitOrderReq;
 import org.dromara.northstar.common.model.core.Trade;
 import org.dromara.northstar.gateway.IContract;
@@ -24,6 +25,8 @@ import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.TradeGateway;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -47,12 +50,14 @@ import cn.hutool.core.util.ObjectUtil;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import xyz.redtorch.pb.CoreEnum;
-import xyz.redtorch.pb.CoreField;
+
 
 @Slf4j
 public class BinanceTradeGatewayLocal implements TradeGateway {
 
     protected FastEventEngine feEngine;
+
+    private static final Logger logger = LoggerFactory.getLogger(BinanceTradeGatewayLocal.class);
 
     @Getter
     private boolean connected;
@@ -164,28 +169,31 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                     Contract contracted = contract.contract();
                     //持仓数量按照最小交易精度转换
                     int positionAmt = Math.abs(Double.valueOf(position.getDouble("positionAmt") / contracted.multiplier()).intValue());
-                    CoreField.PositionField.Builder positionBuilder = CoreField.PositionField.newBuilder()
-                            .setPositionId(contracted.unifiedSymbol() + "@" + posDir)
-                            .setGatewayId(gd.getGatewayId())
-                            .setPositionDirection(posDir)
-                            .setPosition(positionAmt)
-                            .setTdPosition(positionAmt)
-                            .setYdPosition(positionAmt)
-                            .setContract(contracted.toContractField())
-                            .setLastPrice(position.getDouble("entryPrice"))
-                            .setPrice(position.getDouble("entryPrice"))
-                            .setOpenPrice(position.getDouble("entryPrice"))
-                            .setOpenPositionProfit(position.getDouble("unrealizedProfit"))
-                            .setOpenPriceDiff(position.getDouble("unrealizedProfit"))
-                            .setPriceDiff(position.getDouble("unrealizedProfit"))
-                            .setPositionProfit(position.getDouble("unrealizedProfit"))
-                            .setUseMargin(position.getDouble("positionInitialMargin"))
-                            .setExchangeMargin(position.getDouble("positionInitialMargin"));
-                    if (positionBuilder.getUseMargin() != 0) {
-                        positionBuilder.setPositionProfitRatio(positionBuilder.getPositionProfit() / positionBuilder.getUseMargin());
-                        positionBuilder.setOpenPositionProfitRatio(positionBuilder.getOpenPositionProfit() / positionBuilder.getUseMargin());
-                    }
-                    feEngine.emitEvent(NorthstarEventType.POSITION, positionBuilder.build());
+                    Double useMargin = position.getDouble("positionInitialMargin");
+                    Double unrealizedProfit = position.getDouble("unrealizedProfit");
+                    Double positionInitialMargin = position.getDouble("positionInitialMargin");
+                    Position pos = Position.builder()
+                            .positionId(contracted.unifiedSymbol() + "@" + posDir)
+                            .gatewayId(gd.getGatewayId())
+                            .positionDirection(posDir)
+                            .position(positionAmt)
+                            .tdPosition(positionAmt)
+                            .ydPosition(positionAmt)
+                            .contract(contracted)
+                            //.frozen(frozen)
+                            //.tdFrozen(tdFrozen)
+                            //.ydFrozen(ydFrozen)
+                            .openPrice(position.getDouble("entryPrice"))
+                            .openPriceDiff(unrealizedProfit)
+                            .positionProfit(unrealizedProfit)
+                            .positionProfitRatio(useMargin == 0 ? 0 : unrealizedProfit / useMargin)
+                            .contractValue(unrealizedProfit)
+                            .useMargin(positionInitialMargin)
+                            .exchangeMargin(positionInitialMargin)
+                            .updateTimestamp(position.getLong("updateTime"))
+                            .build();
+                    logger.trace("合成持仓对象：{}", JSON.toJSONString(pos));
+                    feEngine.emitEvent(NorthstarEventType.POSITION, pos);
                 }
             }
 
