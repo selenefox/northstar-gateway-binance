@@ -1,8 +1,8 @@
 package org.dromara.northstar.gateway.binance;
 
+import org.dromara.northstar.common.GatewaySettings;
 import org.dromara.northstar.common.constant.FieldType;
 import org.dromara.northstar.common.model.DynamicParams;
-import org.dromara.northstar.common.GatewaySettings;
 import org.dromara.northstar.common.model.Setting;
 
 import lombok.Getter;

@@ -1,5 +1,7 @@
 package org.dromara.northstar.gateway.binance;
 
+import com.alibaba.fastjson2.JSONObject;
+
 import org.dromara.northstar.common.IDataSource;
 import org.dromara.northstar.common.constant.ChannelType;
 import org.dromara.northstar.common.model.Identifier;
@@ -7,8 +9,6 @@ import org.dromara.northstar.gateway.Instrument;
 import org.dromara.northstar.gateway.TradeTimeDefinition;
 import org.dromara.northstar.gateway.model.ContractDefinition;
 import org.dromara.northstar.gateway.time.GenericTradeTime;
-
-import com.alibaba.fastjson2.JSONObject;
 
 import xyz.redtorch.pb.CoreEnum.CurrencyEnum;
 import xyz.redtorch.pb.CoreEnum.ExchangeEnum;
@@ -63,6 +63,7 @@ public class BinanceContract implements Instrument {
     public void setContractDefinition(ContractDefinition contractDef) {
         this.contractDef = contractDef;
     }
+
     @Override
     public IDataSource dataSource() {
         return dataSrc;

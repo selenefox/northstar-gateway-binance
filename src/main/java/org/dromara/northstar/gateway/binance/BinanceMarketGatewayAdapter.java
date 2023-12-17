@@ -32,7 +32,7 @@ import xyz.redtorch.pb.CoreField;
 import xyz.redtorch.pb.CoreField.ContractField;
 
 @Slf4j
-public class BinanceMarketGatewayAdapter extends GatewayAbstract implements MarketGateway{
+public class BinanceMarketGatewayAdapter extends GatewayAbstract implements MarketGateway {
 
     private UMWebsocketClientImpl client;
 
@@ -55,8 +55,8 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
     public BinanceMarketGatewayAdapter(FastEventEngine feEngine, GatewayDescription gd, IMarketCenter mktCenter) {
         super(gd, mktCenter);
         BinanceGatewaySettings settings = (BinanceGatewaySettings) gd.getSettings();
-        this.client = new UMWebsocketClientImpl(settings.isAccountType() ?  DefaultUrls.USDM_WS_URL : DefaultUrls.USDM_UAT_WSS_URL);
-        this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(),settings.getSecretKey(), settings.isAccountType() ?  DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
+        this.client = new UMWebsocketClientImpl(settings.isAccountType() ? DefaultUrls.USDM_WS_URL : DefaultUrls.USDM_UAT_WSS_URL);
+        this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey(), settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
         this.streamIdList = new ArrayList<>();
         this.feEngine = feEngine;
         this.gd = gd;
@@ -101,13 +101,12 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
         //成交量精度
         double quantityPrecision = 1 / Math.pow(10, contract.contractField().getQuantityPrecision());
 
-        int tickerStreamId = getSymbolTicker(symbol, contract, quantityPrecision);
-        int klineStreamId = getKlineStream(symbol, contract, quantityPrecision);
+        int tickerStreamId = getSymbolStreams(symbol, contract, quantityPrecision);
         streamIdList.add(tickerStreamId);
-        streamIdList.add(klineStreamId);
 
         return true;
     }
+
     /**
      * <br>Description:获取k线组装BAR数据
      * <br>Author: 李嘉豪
@@ -157,12 +156,19 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
         }));
     }
 
-    //获取完整Ticker信息 每2000毫秒推送
-    private int getSymbolTicker(String symbol, Contract contract, double quantityPrecision) {
+    /**
+     * <br>Description:使用Streams订阅websocket，获取完整Ticker信息每2000毫秒推送、获取k线组装BAR数据、获取5档买卖单信息
+     * <br>Author: 李嘉豪（lijiahao-zhixin@boss.com.cn）
+     * <br>Date:2023年12月05日
+     */
+
+    private int getSymbolStreams(String symbol, Contract contract, double quantityPrecision) {
         ArrayList<String> streams = new ArrayList<>();
         String ticker = String.format("%s@ticker", symbol.toLowerCase());
+        String kline = String.format("%s@kline_1m", symbol.toLowerCase());
         String depth = String.format("%s@depth5@500ms", symbol.toLowerCase());
         streams.add(ticker);
+        streams.add(kline);
         streams.add(depth);
 
         List<Double> bidPriceList = new ArrayList<>();
@@ -173,8 +179,8 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
             ContractField c = contract.contractField();
             Map map = JSON.parseObject(event, Map.class);
             try {
+                Map data = JSON.parseObject(JSON.toJSONString(map.get("data")), Map.class);
                 if (depth.equals(map.get("stream"))) {
-                    Map data = JSON.parseObject(JSON.toJSONString(map.get("data")), Map.class);
                     // 从Map中获取买方和卖方的数据
                     List<List<String>> bids = (List<List<String>>) data.get("b");
                     List<List<String>> asks = (List<List<String>>) data.get("a");
@@ -194,7 +200,6 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                         askVolumeList.add((int) (Double.parseDouble(ask.get(1)) / quantityPrecision));
                     }
                 } else if (ticker.equals(map.get("stream"))) {
-                    Map data = JSON.parseObject(JSON.toJSONString(map.get("data")), Map.class);
                     LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli((Long) data.get("E")), ZoneId.systemDefault());
                     String actionTime = dateTime.format(DateTimeConstant.T_FORMAT_WITH_MS_INT_FORMATTER);
                     String tradingDay = dateTime.format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
@@ -230,11 +235,43 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                     CoreField.TickField tick = tickBuilder.build();
                     feEngine.emitEvent(NorthstarEventType.TICK, tick);
                     lastUpdateTickTime = System.currentTimeMillis();
+                } else if (kline.equals(map.get("stream"))) {
+                    Map k = JSON.parseObject(JSON.toJSONString(data.get("k")), Map.class);
+                    if (!(Boolean) k.get("x")) {
+                        return;
+                    }
+                    LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli((Long) data.get("E")), ZoneId.systemDefault()).withSecond(0).withNano(0);
+                    String actionTime = dateTime.format(DateTimeConstant.T_FORMAT_FORMATTER);
+                    String tradingDay = dateTime.format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
+                    double volume = Double.parseDouble((String) k.get("v")) / quantityPrecision; //成交量精度
+                    double turnover = Double.parseDouble((String) k.get("q"));
+                    Long numTrades = Long.valueOf(String.valueOf(k.get("n")));
+                    CoreField.BarField bar = CoreField.BarField.newBuilder()
+                            .setUnifiedSymbol(contract.contractField().getUnifiedSymbol())
+                            .setGatewayId(gatewayId)
+                            .setTradingDay(tradingDay)
+                            .setActionDay(tradingDay)
+                            .setActionTime(actionTime)
+                            .setActionTimestamp(dateTime.toInstant(ZoneOffset.ofHours(8)).toEpochMilli())
+                            .setOpenPrice(Double.valueOf(String.valueOf(k.get("o"))))
+                            .setHighPrice(Double.valueOf(String.valueOf(k.get("h"))))
+                            .setLowPrice(Double.valueOf(String.valueOf(k.get("l"))))
+                            .setClosePrice(Double.valueOf(String.valueOf(k.get("c"))))
+                            .setVolume((long) volume)
+                            .setVolumeDelta((long) volume)
+                            .setTurnover(turnover)
+                            .setTurnoverDelta(turnover)
+                            .setNumTrades(numTrades)
+                            .setNumTradesDelta(numTrades)
+                            .setChannelType(ChannelType.BIAN.toString())
+                            .build();
+                    feEngine.emitEvent(NorthstarEventType.BAR, bar);
                 }
 
             } catch (Throwable t) {
+                log.error("{} OnRtnDepthMarketData Exception", logInfo, t);
                 //断练重新连接
-                int klineStreamId = getSymbolTicker(symbol, contract, quantityPrecision);
+                int klineStreamId = getSymbolStreams(symbol, contract, quantityPrecision);
                 streamIdList.add(klineStreamId);
             }
         }));
