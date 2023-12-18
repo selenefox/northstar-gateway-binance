@@ -5,15 +5,17 @@ import com.alibaba.fastjson2.JSONObject;
 import org.dromara.northstar.common.IDataSource;
 import org.dromara.northstar.common.constant.ChannelType;
 import org.dromara.northstar.common.model.Identifier;
+import org.dromara.northstar.common.model.core.Contract;
+import org.dromara.northstar.common.model.core.ContractDefinition;
 import org.dromara.northstar.gateway.Instrument;
-import org.dromara.northstar.gateway.TradeTimeDefinition;
-import org.dromara.northstar.gateway.model.ContractDefinition;
-import org.dromara.northstar.gateway.time.GenericTradeTime;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 
 import xyz.redtorch.pb.CoreEnum.CurrencyEnum;
 import xyz.redtorch.pb.CoreEnum.ExchangeEnum;
 import xyz.redtorch.pb.CoreEnum.ProductClassEnum;
-import xyz.redtorch.pb.CoreField.ContractField;
 
 
 public class BinanceContract implements Instrument {
@@ -50,11 +52,6 @@ public class BinanceContract implements Instrument {
     }
 
     @Override
-    public TradeTimeDefinition tradeTimeDefinition() {
-        return new GenericTradeTime();
-    }
-
-    @Override
     public ChannelType channelType() {
         return ChannelType.BIAN;
     }
@@ -73,24 +70,29 @@ public class BinanceContract implements Instrument {
      * 该合约信息细节还待斟酌
      */
     @Override
-    public ContractField contractField() {
-        return ContractField.newBuilder()
-                .setGatewayId(ChannelType.BIAN.toString())
-                .setSymbol(name())
-                .setName(name())
-                .setFullName(name())
-                .setUnifiedSymbol(String.format("%s@%s@%s", name(), exchange(), productClass()))
-                .setCurrency(CurrencyEnum.USD)
-                .setExchange(exchange())
-                .setProductClass(productClass())
-                .setPriceTick(json.getDoubleValue("pricePrecision"))
-                .setPricePrecision(json.getIntValue("pricePrecision"))
-                .setQuantityPrecision(json.getIntValue("quantityPrecision"))
-                .setMultiplier(1 / Math.pow(10, json.getIntValue("quantityPrecision")))
-                .setContractId(identifier().value())
-                .setLongMarginRatio(json.getDoubleValue("longMarginRatio"))
-                .setShortMarginRatio(json.getDoubleValue("shortMarginRatio"))
-                .setChannelType(ChannelType.BIAN.toString())
+    public Contract contract() {
+        Instant e = Instant.ofEpochMilli(json.getLong("deliveryDate"));
+        LocalDate lastTradeDate = e.atZone(ZoneId.systemDefault()).toLocalDate();
+
+        return Contract.builder()
+                .gatewayId(ChannelType.BIAN.toString())
+                .symbol(name())
+                .name(name())
+                .fullName(name())
+                .unifiedSymbol(String.format("%s@%s@%s", name(), exchange(), productClass()))
+                .currency(CurrencyEnum.USD)
+                .exchange(exchange())
+                .productClass(productClass())
+                .lastTradeDate(lastTradeDate)
+                .priceTick(1 / Math.pow(10, json.getIntValue("pricePrecision")))
+                .pricePrecision(json.getIntValue("pricePrecision"))
+                .quantityPrecision(json.getIntValue("quantityPrecision"))
+                .multiplier(1 / Math.pow(10, json.getIntValue("quantityPrecision")))
+                .contractId(identifier().value())
+                .longMarginRatio(json.getDoubleValue("longMarginRatio"))
+                .shortMarginRatio(json.getDoubleValue("shortMarginRatio"))
+                .channelType(ChannelType.BIAN)
+                .contractDefinition(contractDef)
                 .build();
     }
 
