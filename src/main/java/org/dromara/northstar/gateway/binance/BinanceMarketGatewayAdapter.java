@@ -12,13 +12,16 @@ import org.dromara.northstar.common.constant.TickType;
 import org.dromara.northstar.common.event.FastEventEngine;
 import org.dromara.northstar.common.event.NorthstarEventType;
 import org.dromara.northstar.common.model.GatewayDescription;
-import org.dromara.northstar.gateway.Contract;
-import org.dromara.northstar.gateway.GatewayAbstract;
+import org.dromara.northstar.common.model.core.Bar;
+import org.dromara.northstar.common.model.core.Contract;
+import org.dromara.northstar.common.model.core.Tick;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.MarketGateway;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -29,7 +32,6 @@ import java.util.Timer;
 
 import lombok.extern.slf4j.Slf4j;
 import xyz.redtorch.pb.CoreField;
-import xyz.redtorch.pb.CoreField.ContractField;
 
 @Slf4j
 public class BinanceMarketGatewayAdapter extends GatewayAbstract implements MarketGateway {
@@ -94,12 +96,12 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
     }
 
     @Override
-    public boolean subscribe(ContractField contractField) {
+    public boolean subscribe(Contract contract) {
         log.debug("[{}] 币安网关订阅", gd.getGatewayId());
-        String symbol = contractField.getSymbol();
-        Contract contract = mktCenter.getContract(ChannelType.BIAN, symbol);
+
+        String symbol = contract.symbol();
         //成交量精度
-        double quantityPrecision = 1 / Math.pow(10, contract.contractField().getQuantityPrecision());
+        double quantityPrecision = 1 / Math.pow(10, contract.quantityPrecision());
 
         int tickerStreamId = getSymbolStreams(symbol, contract, quantityPrecision);
         streamIdList.add(tickerStreamId);
@@ -128,7 +130,7 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                 double turnover = Double.parseDouble((String) k.get("q"));
                 Long numTrades = Long.valueOf(String.valueOf(k.get("n")));
                 CoreField.BarField bar = CoreField.BarField.newBuilder()
-                        .setUnifiedSymbol(contract.contractField().getUnifiedSymbol())
+                        .setUnifiedSymbol(contract.unifiedSymbol())
                         .setGatewayId(gatewayId)
                         .setTradingDay(tradingDay)
                         .setActionDay(tradingDay)
@@ -176,7 +178,6 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
         List<Integer> bidVolumeList = new ArrayList<>();
         List<Integer> askVolumeList = new ArrayList<>();
         return client.combineStreams(streams, ((event) -> {
-            ContractField c = contract.contractField();
             Map map = JSON.parseObject(event, Map.class);
             try {
                 Map data = JSON.parseObject(JSON.toJSONString(map.get("data")), Map.class);
@@ -200,39 +201,46 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                         askVolumeList.add((int) (Double.parseDouble(ask.get(1)) / quantityPrecision));
                     }
                 } else if (ticker.equals(map.get("stream"))) {
-                    LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli((Long) data.get("E")), ZoneId.systemDefault());
-                    String actionTime = dateTime.format(DateTimeConstant.T_FORMAT_WITH_MS_INT_FORMATTER);
-                    String tradingDay = dateTime.format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
-                    CoreField.TickField.Builder tickBuilder = CoreField.TickField.newBuilder();
-                    tickBuilder.setUnifiedSymbol(c.getUnifiedSymbol());
-                    tickBuilder.setGatewayId(gatewayId);
-                    tickBuilder.setTradingDay(tradingDay);
-                    tickBuilder.setActionDay(tradingDay);
-                    tickBuilder.setActionTime(actionTime);
-                    tickBuilder.setActionTimestamp((Long) data.get("E"));
-                    tickBuilder.setStatus(TickType.NORMAL_TICK.getCode());
-                    tickBuilder.setLastPrice(Double.valueOf(String.valueOf(data.get("c"))));
-                    tickBuilder.setAvgPrice(Double.valueOf(String.valueOf(data.get("w"))));
-                    tickBuilder.setHighPrice(Double.valueOf(String.valueOf(data.get("h"))));
-                    tickBuilder.setLowPrice(Double.valueOf(String.valueOf(data.get("l"))));
-                    tickBuilder.setOpenPrice(Double.valueOf(String.valueOf(data.get("o"))));
+                    Long actionTimestamp = (Long) data.get("E");
+                    Instant e = Instant.ofEpochMilli(actionTimestamp);
+                    LocalTime actionTime = e.atZone(ZoneId.systemDefault()).toLocalTime();
+                    LocalDate tradingDay = e.atZone(ZoneId.systemDefault()).toLocalDate();
+
                     double volume = Double.parseDouble((String) data.get("v"));
                     double Q = Double.parseDouble((String) data.get("Q"));
                     double turnover = Double.parseDouble((String) data.get("q"));
 
-                    tickBuilder.setVolume((long) Q);
-                    //成交量按照最小交易单位数量实现
-                    tickBuilder.setVolumeDelta((long) (Q / quantityPrecision));
-                    tickBuilder.setTurnover(turnover);
-                    tickBuilder.setTurnoverDelta(turnover);
-
-                    tickBuilder.addAllAskPrice(askPriceList);
-                    tickBuilder.addAllBidPrice(bidPriceList);
-                    tickBuilder.addAllAskVolume(askVolumeList);
-                    tickBuilder.addAllBidVolume(bidVolumeList);
-
-                    tickBuilder.setChannelType(ChannelType.BIAN.toString());
-                    CoreField.TickField tick = tickBuilder.build();
+                    Tick tick = Tick.builder()
+                            .contract(contract)
+                            .tradingDay(tradingDay)
+                            .actionDay(tradingDay)
+                            .actionTime(actionTime)
+                            .actionTimestamp(actionTimestamp)
+                            .avgPrice(Double.valueOf(String.valueOf(data.get("w"))))
+                            .highPrice(Double.valueOf(String.valueOf(data.get("h"))))
+                            .lowPrice(Double.valueOf(String.valueOf(data.get("l"))))
+                            .openPrice(Double.valueOf(String.valueOf(data.get("o"))))
+                            .lastPrice(Double.valueOf(String.valueOf(data.get("c"))))
+                            //.settlePrice(isReasonable(upperLimit, lowerLimit, settlePrice) ? settlePrice : preSettlePrice)
+                            //.openInterest(openInterest)
+                            //.openInterestDelta(openInterestDelta)
+                            .volume((long) Q)
+                            .volumeDelta((long) (Q / quantityPrecision))
+                            .turnover(turnover)
+                            .turnoverDelta(turnover)
+                            //.lowerLimit(lowerLimit)
+                            //.upperLimit(upperLimit)
+                            //.preClosePrice(preClosePrice)
+                            //.preSettlePrice(preSettlePrice)
+                            //.preOpenInterest(preOpenInterest)
+                            .askPrice(askPriceList)
+                            .askVolume(askVolumeList)
+                            .bidPrice(bidPriceList)
+                            .bidVolume(bidVolumeList)
+                            .gatewayId(gatewayId)
+                            .channelType(ChannelType.BIAN)
+                            .type(TickType.MARKET_TICK)
+                            .build();
                     feEngine.emitEvent(NorthstarEventType.TICK, tick);
                     lastUpdateTickTime = System.currentTimeMillis();
                 } else if (kline.equals(map.get("stream"))) {
@@ -240,30 +248,29 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                     if (!(Boolean) k.get("x")) {
                         return;
                     }
-                    LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli((Long) data.get("E")), ZoneId.systemDefault()).withSecond(0).withNano(0);
-                    String actionTime = dateTime.format(DateTimeConstant.T_FORMAT_FORMATTER);
-                    String tradingDay = dateTime.format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
+                    Long actionTimestamp = (Long) data.get("E");
+                    Instant e = Instant.ofEpochMilli(actionTimestamp);
+                    LocalTime actionTime = e.atZone(ZoneId.systemDefault()).toLocalTime();
+                    LocalDate tradingDay = e.atZone(ZoneId.systemDefault()).toLocalDate();
                     double volume = Double.parseDouble((String) k.get("v")) / quantityPrecision; //成交量精度
                     double turnover = Double.parseDouble((String) k.get("q"));
                     Long numTrades = Long.valueOf(String.valueOf(k.get("n")));
-                    CoreField.BarField bar = CoreField.BarField.newBuilder()
-                            .setUnifiedSymbol(contract.contractField().getUnifiedSymbol())
-                            .setGatewayId(gatewayId)
-                            .setTradingDay(tradingDay)
-                            .setActionDay(tradingDay)
-                            .setActionTime(actionTime)
-                            .setActionTimestamp(dateTime.toInstant(ZoneOffset.ofHours(8)).toEpochMilli())
-                            .setOpenPrice(Double.valueOf(String.valueOf(k.get("o"))))
-                            .setHighPrice(Double.valueOf(String.valueOf(k.get("h"))))
-                            .setLowPrice(Double.valueOf(String.valueOf(k.get("l"))))
-                            .setClosePrice(Double.valueOf(String.valueOf(k.get("c"))))
-                            .setVolume((long) volume)
-                            .setVolumeDelta((long) volume)
-                            .setTurnover(turnover)
-                            .setTurnoverDelta(turnover)
-                            .setNumTrades(numTrades)
-                            .setNumTradesDelta(numTrades)
-                            .setChannelType(ChannelType.BIAN.toString())
+                    Bar bar = Bar.builder()
+                            .contract(contract)
+                            .gatewayId(gatewayId)
+                            .tradingDay(tradingDay)
+                            .actionDay(tradingDay)
+                            .actionTime(actionTime)
+                            .actionTimestamp(actionTimestamp)
+                            .openPrice(Double.valueOf(String.valueOf(k.get("o"))))
+                            .highPrice(Double.valueOf(String.valueOf(k.get("h"))))
+                            .lowPrice(Double.valueOf(String.valueOf(k.get("l"))))
+                            .closePrice(Double.valueOf(String.valueOf(k.get("c"))))
+                            .volume((long) volume)
+                            .volumeDelta((long) volume)
+                            .turnover(turnover)
+                            .turnoverDelta(turnover)
+                            .channelType(ChannelType.BIAN)
                             .build();
                     feEngine.emitEvent(NorthstarEventType.BAR, bar);
                 }
@@ -278,7 +285,7 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
     }
 
     @Override
-    public boolean unsubscribe(ContractField contract) {
+    public boolean unsubscribe(Contract contract) {
         Iterator<Integer> iterator = streamIdList.iterator();
         while (iterator.hasNext()) {
             client.closeConnection(iterator.next());
