@@ -199,7 +199,7 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                     lastUpdateTickTime = System.currentTimeMillis();
                 } else if (kline.equals(stream)) {
                     JSONObject k = data.getJSONObject("k");
-                    if (k.getBoolean("x")) {
+                    if (!k.getBoolean("x")) {
                         return;
                     }
                     Long actionTimestamp = data.getLong("E");
