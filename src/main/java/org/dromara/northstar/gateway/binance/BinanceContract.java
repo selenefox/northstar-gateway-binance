@@ -12,7 +12,6 @@ import org.dromara.northstar.gateway.Instrument;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.Objects;
 
 import xyz.redtorch.pb.CoreEnum.CurrencyEnum;
 import xyz.redtorch.pb.CoreEnum.ExchangeEnum;
@@ -93,6 +92,7 @@ public class BinanceContract implements Instrument {
                 .longMarginRatio(json.getDoubleValue("longMarginRatio"))
                 .shortMarginRatio(json.getDoubleValue("shortMarginRatio"))
                 .channelType(ChannelType.BIAN)
+                .tradable(true)
                 .contractDefinition(contractDef)
                 .build();
     }

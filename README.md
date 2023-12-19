@@ -8,4 +8,6 @@ northstar盈富量化平台币安网关接口实现
 -Dhttp.proxyHost=127.0.0.1
 -Dhttp.proxyPort=18081
 
+-Dhttps.proxyHost=127.0.0.1
+-Dhttps.proxyPort=18081
 币安网关中的成交量，下单数量，持仓数量都是按照最小交易精度转换后的，举个例子：在BTCUSDT合约中，下单数量为1，并不是下单了1个BTC而是1*最小交易精度（0.001），成交量，持仓量亦是如此
