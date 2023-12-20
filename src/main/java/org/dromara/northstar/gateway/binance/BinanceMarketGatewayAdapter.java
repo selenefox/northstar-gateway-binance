@@ -202,7 +202,7 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                     if (!k.getBoolean("x")) {
                         return;
                     }
-                    Long actionTimestamp = data.getLong("E");
+                    Long actionTimestamp = k.getLong("t");
                     Instant e = Instant.ofEpochMilli(actionTimestamp);
                     LocalTime actionTime = e.atZone(ZoneId.systemDefault()).toLocalTime();
                     LocalDate tradingDay = e.atZone(ZoneId.systemDefault()).toLocalDate();
