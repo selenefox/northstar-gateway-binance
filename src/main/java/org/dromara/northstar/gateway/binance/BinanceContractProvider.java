@@ -11,6 +11,7 @@ import com.binance.connector.client.impl.UMFuturesClientImpl;
 import org.dromara.northstar.common.model.core.ContractDefinition;
 import org.dromara.northstar.common.model.core.TimeSlot;
 import org.dromara.northstar.common.model.core.TradeTimeDefinition;
+import org.dromara.northstar.common.utils.DateTimeUtils;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.springframework.stereotype.Component;
 
@@ -36,6 +37,9 @@ public class BinanceContractProvider {
     private BinanceDataServiceManager dataMgr;
 
     UMFuturesClientImpl client;
+
+    private TimeSlot allDay = TimeSlot.builder().start(DateTimeUtils.fromCacheTime(0, 0)).end(DateTimeUtils.fromCacheTime(0, 0)).build();
+
 
     public BinanceContractProvider(BinanceGatewaySettings settings, IMarketCenter mktCenter, BinanceDataServiceManager dataMgr) {
         this.mktCenter = mktCenter;
@@ -102,6 +106,7 @@ public class BinanceContractProvider {
 
     public List<ContractDefinition> get() {
         List<ContractDefinition> contractDefs = new ArrayList<>();
+
         try {
             String result = client.market().exchangeInfo();
             JSONObject json = JSON.parseObject(result);
@@ -109,12 +114,14 @@ public class BinanceContractProvider {
             for (int i = 0; i < symbols.size(); i++) {
                 JSONObject obj = symbols.getJSONObject(i);
                 BinanceContract contract = new BinanceContract(obj, dataMgr);
-                ContractDefinition cnFtTt1 = ContractDefinition.builder().name(contract.name()).exchange(contract.exchange()).productClass(contract.productClass())
-                        .symbolPattern(Pattern.compile("^.*$")).commissionRate(3 / 10000D).dataSource(dataMgr).tradeTimeDef(TradeTimeDefinition.builder()
-                                .timeSlots(List.of(
-                                        TimeSlot.builder().start(LocalTime.of(0, 0)).end(LocalTime.of(0, 0)).build()
-                                ))
-                                .build()).build();
+                ContractDefinition cnFtTt1 = ContractDefinition.builder()
+                        .name(contract.name())
+                        .exchange(contract.exchange())
+                        .productClass(contract.productClass())
+                        .symbolPattern(Pattern.compile("^.*$"))
+                        .commissionRate(3 / 10000D).dataSource(dataMgr)
+                        .tradeTimeDef(TradeTimeDefinition.builder().timeSlots(List.of(allDay)).build())
+                        .build();
                 contractDefs.add(cnFtTt1);
             }
         } catch (BinanceConnectorException e) {
