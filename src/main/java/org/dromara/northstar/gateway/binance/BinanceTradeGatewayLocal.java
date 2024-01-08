@@ -10,19 +10,26 @@ import com.binance.connector.client.impl.UMWebsocketClientImpl;
 
 import org.dromara.northstar.common.constant.ChannelType;
 import org.dromara.northstar.common.constant.ConnectionState;
-import org.dromara.northstar.common.constant.DateTimeConstant;
 import org.dromara.northstar.common.event.FastEventEngine;
 import org.dromara.northstar.common.event.NorthstarEventType;
 import org.dromara.northstar.common.exception.TradeException;
 import org.dromara.northstar.common.model.GatewayDescription;
-import org.dromara.northstar.gateway.Contract;
+import org.dromara.northstar.common.model.core.Account;
+import org.dromara.northstar.common.model.core.Contract;
+import org.dromara.northstar.common.model.core.Order;
+import org.dromara.northstar.common.model.core.Position;
+import org.dromara.northstar.common.model.core.SubmitOrderReq;
+import org.dromara.northstar.common.model.core.Trade;
+import org.dromara.northstar.gateway.IContract;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.TradeGateway;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -43,14 +50,14 @@ import cn.hutool.core.util.ObjectUtil;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import xyz.redtorch.pb.CoreEnum;
-import xyz.redtorch.pb.CoreField;
-import xyz.redtorch.pb.CoreField.CancelOrderReqField;
-import xyz.redtorch.pb.CoreField.SubmitOrderReqField;
+
 
 @Slf4j
 public class BinanceTradeGatewayLocal implements TradeGateway {
 
     protected FastEventEngine feEngine;
+
+    private static final Logger logger = LoggerFactory.getLogger(BinanceTradeGatewayLocal.class);
 
     @Getter
     private boolean connected;
@@ -69,9 +76,9 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     private UMWebsocketClientImpl websocketClient;
 
-    protected Map<String, CoreField.OrderField> orderMap = new HashMap<>();
+    protected Map<String, Order> orderMap = new HashMap<>();
 
-    protected Map<String, SubmitOrderReqField> submitOrderReqFieldMap = new HashMap<>();
+    protected Map<String, SubmitOrderReq> submitOrderReqFieldMap = new HashMap<>();
 
     private List<Integer> streamIdList = new ArrayList<>();
 
@@ -158,32 +165,35 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                     String symbol = position.getString("symbol");
                     String positionSide = position.getString("positionSide");
                     CoreEnum.PositionDirectionEnum posDir = "LONG".equals(positionSide) ? CoreEnum.PositionDirectionEnum.PD_Long : CoreEnum.PositionDirectionEnum.PD_Short;
-                    Contract contract = mktCenter.getContract(ChannelType.BIAN, symbol);
-                    CoreField.ContractField contracted = contract.contractField();
+                    IContract contract = mktCenter.getContract(ChannelType.BIAN, symbol);
+                    Contract contracted = contract.contract();
                     //持仓数量按照最小交易精度转换
-                    int positionAmt = Math.abs(Double.valueOf(position.getDouble("positionAmt") / contracted.getMultiplier()).intValue());
-                    CoreField.PositionField.Builder positionBuilder = CoreField.PositionField.newBuilder()
-                            .setPositionId(contracted.getUnifiedSymbol() + "@" + posDir)
-                            .setGatewayId(gd.getGatewayId())
-                            .setPositionDirection(posDir)
-                            .setPosition(positionAmt)
-                            .setTdPosition(positionAmt)
-                            .setYdPosition(positionAmt)
-                            .setContract(contracted)
-                            .setLastPrice(position.getDouble("entryPrice"))
-                            .setPrice(position.getDouble("entryPrice"))
-                            .setOpenPrice(position.getDouble("entryPrice"))
-                            .setOpenPositionProfit(position.getDouble("unrealizedProfit"))
-                            .setOpenPriceDiff(position.getDouble("unrealizedProfit"))
-                            .setPriceDiff(position.getDouble("unrealizedProfit"))
-                            .setPositionProfit(position.getDouble("unrealizedProfit"))
-                            .setUseMargin(position.getDouble("positionInitialMargin"))
-                            .setExchangeMargin(position.getDouble("positionInitialMargin"));
-                    if (positionBuilder.getUseMargin() != 0) {
-                        positionBuilder.setPositionProfitRatio(positionBuilder.getPositionProfit() / positionBuilder.getUseMargin());
-                        positionBuilder.setOpenPositionProfitRatio(positionBuilder.getOpenPositionProfit() / positionBuilder.getUseMargin());
-                    }
-                    feEngine.emitEvent(NorthstarEventType.POSITION, positionBuilder.build());
+                    int positionAmt = Math.abs(Double.valueOf(position.getDouble("positionAmt") / contracted.multiplier()).intValue());
+                    Double useMargin = position.getDouble("positionInitialMargin");
+                    Double unrealizedProfit = position.getDouble("unrealizedProfit");
+                    Double positionInitialMargin = position.getDouble("positionInitialMargin");
+                    Position pos = Position.builder()
+                            .positionId(contracted.unifiedSymbol() + "@" + posDir)
+                            .gatewayId(gd.getGatewayId())
+                            .positionDirection(posDir)
+                            .position(positionAmt)
+                            .tdPosition(positionAmt)
+                            .ydPosition(positionAmt)
+                            .contract(contracted)
+                            //.frozen(frozen)
+                            //.tdFrozen(tdFrozen)
+                            //.ydFrozen(ydFrozen)
+                            .openPrice(position.getDouble("entryPrice"))
+                            .openPriceDiff(unrealizedProfit)
+                            .positionProfit(unrealizedProfit)
+                            .positionProfitRatio(useMargin == 0 ? 0 : unrealizedProfit / useMargin)
+                            .contractValue(unrealizedProfit)
+                            .useMargin(positionInitialMargin)
+                            .exchangeMargin(positionInitialMargin)
+                            .updateTimestamp(position.getLong("updateTime"))
+                            .build();
+                    logger.trace("合成持仓对象：{}", JSON.toJSONString(pos));
+                    feEngine.emitEvent(NorthstarEventType.POSITION, pos);
                 }
             }
 
@@ -208,7 +218,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         List<JSONObject> openOrderList = JSON.parseArray(result).stream().map(item -> (JSONObject) item).collect(Collectors.toList());
         //维护订单ID和symbol的map
         for (JSONObject order : openOrderList) {
-            CoreField.ContractField contractField = mktCenter.getContract(ChannelType.BIAN, order.getString("symbol")).contractField();
+            IContract contract = mktCenter.getContract(ChannelType.BIAN, order.getString("symbol"));
+            Contract contracted = contract.contract();
             String side = order.getString("side");
             String positionSide = order.getString("positionSide");
             CoreEnum.DirectionEnum dBuy = null;
@@ -220,8 +231,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                 dBuy = CoreEnum.DirectionEnum.D_Sell;
                 offsetFlag = CoreEnum.OffsetFlagEnum.OF_Close;
             }
-            CoreField.OrderField.Builder orderBuilder = getOrderBuilder(dBuy, order, contractField, offsetFlag);
-            orderMap.put(order.getString("clientOrderId"), orderBuilder.build());
+            Order orderBuilder = getOrderBuilder(dBuy, order, contracted, offsetFlag);
+            orderMap.put(order.getString("clientOrderId"), orderBuilder);
         }
     }
 
@@ -248,18 +259,17 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     @NotNull
     private void getAccountField(JSONObject jsonObject) {
-        CoreField.AccountField accountBuilder = CoreField.AccountField.newBuilder()
-                .setAccountId(gd.getGatewayId())
-                .setAvailable(jsonObject.getDouble("availableBalance"))
-                .setBalance(jsonObject.getDouble("totalCrossWalletBalance"))
-                .setCloseProfit(jsonObject.getDouble("totalUnrealizedProfit"))
+        Account accountBuilder = Account.builder()
+                .accountId(gd.getGatewayId())
+                .available(jsonObject.getDouble("availableBalance"))
+                .balance(jsonObject.getDouble("totalCrossWalletBalance"))
+                .closeProfit(jsonObject.getDouble("totalUnrealizedProfit"))
                 //TODO，ETH/BTC期货合约将按照BUSD手续费表计。这里币安返回的feeTier是手续费等级,0=0.0200%/0.0500%(USDT-Maker / Taker),暂时写死后续处理
-                .setCommission(Double.valueOf(0.0002))
-                .setGatewayId(gd.getGatewayId())
-                .setCurrency(CoreEnum.CurrencyEnum.USD)
-                .setName("BIAN")
-                .setMargin(jsonObject.getDouble("totalInitialMargin"))
-                .setPositionProfit(jsonObject.getDouble("totalCrossUnPnl"))
+                .commission(Double.valueOf(0.0002))
+                .gatewayId(gd.getGatewayId())
+                .currency(CoreEnum.CurrencyEnum.USD)
+                .margin(jsonObject.getDouble("totalInitialMargin"))
+                .positionProfit(jsonObject.getDouble("totalCrossUnPnl"))
                 .build();
         feEngine.emitEvent(NorthstarEventType.ACCOUNT, accountBuilder);
     }
@@ -287,39 +297,36 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         Double l = o.getDouble("l");
         //订单末次成交价格
         Double L = o.getDouble("L");
-        CoreField.ContractField contract = mktCenter.getContract(ChannelType.BIAN, s).contractField();
+        SubmitOrderReq orderReq = submitOrderReqFieldMap.get(c);
 
-        LocalDateTime dateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(T), ZoneId.systemDefault()).withSecond(0).withNano(0);
-        String actionTime = dateTime.format(DateTimeConstant.T_FORMAT_WITH_MS_INT_FORMATTER);
-        String tradingDay = dateTime.format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
-        actionTime = LocalTime.parse(actionTime, DateTimeConstant.T_FORMAT_WITH_MS_INT_FORMATTER).format(DateTimeConstant.T_FORMAT_FORMATTER);
+        Contract contract = orderReq.contract();
+        Instant e = Instant.ofEpochMilli(T);
+
+        LocalTime tradeTime = e.atZone(ZoneId.systemDefault()).toLocalTime();
+        LocalDate tradeDate = e.atZone(ZoneId.systemDefault()).toLocalDate();
+        LocalDate tradingDay = LocalDate.now();
         //订单末次成交量按照最小交易精度转换
-        int executedQty = Math.abs(Double.valueOf(l / contract.getMultiplier()).intValue());
+        int executedQty = Math.abs(Double.valueOf(l / contract.multiplier()).intValue());
         //订单原始数量
-        int origQty = Math.abs(Double.valueOf(q / contract.getMultiplier()).intValue());
+        int origQty = Math.abs(Double.valueOf(q / contract.multiplier()).intValue());
 
-        SubmitOrderReqField orderReq = submitOrderReqFieldMap.get(c);
         if (ObjectUtil.isNotEmpty(orderReq)) {
 
-
-            CoreField.TradeField tradeField = CoreField.TradeField.newBuilder()
-                    .setTradeId(System.currentTimeMillis() + "")
-                    .setAccountId(orderReq.getGatewayId())
-                    .setAdapterOrderId("")
-                    .setContract(orderReq.getContract())
-                    .setTradeTimestamp(T)
-                    .setDirection(orderReq.getDirection())
-                    .setGatewayId(orderReq.getGatewayId())
-                    .setHedgeFlag(orderReq.getHedgeFlag())
-                    .setOffsetFlag(orderReq.getOffsetFlag())
-                    .setOrderId(orderReq.getOriginOrderId())
-                    .setOriginOrderId(orderReq.getOriginOrderId())
-                    .setPrice(L)
-                    .setPriceSource(CoreEnum.PriceSourceEnum.PSRC_LastPrice)
-                    .setTradeDate(tradingDay)
-                    .setTradingDay(tradingDay)
-                    .setTradeTime(actionTime)
-                    .setVolume(orderReq.getVolume())
+            Trade trade = Trade.builder()
+                    .tradeDate(tradeDate)
+                    .tradeTime(tradeTime)
+                    .tradingDay(tradingDay)
+                    .tradeTimestamp(T)
+                    .direction(orderReq.direction())
+                    .offsetFlag(orderReq.offsetFlag())
+                    .contract(orderReq.contract())
+                    .orderId(orderReq.originOrderId())
+                    .originOrderId(orderReq.originOrderId())
+                    .price(L)
+                    .volume(orderReq.volume())
+                    .gatewayId(orderReq.gatewayId())
+                    .tradeType(CoreEnum.TradeTypeEnum.TT_Common)
+                    .priceSource(CoreEnum.PriceSourceEnum.PSRC_LastPrice)
                     .build();
 
             CoreEnum.DirectionEnum dBuy = null;
@@ -331,42 +338,40 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                 dBuy = CoreEnum.DirectionEnum.D_Sell;
                 offsetFlag = CoreEnum.OffsetFlagEnum.OF_Close;
             }
-            CoreField.OrderField.Builder orderField = CoreField.OrderField.newBuilder();
+            Order.OrderBuilder buildered = Order.builder();
 
-            orderField.setOrderId(c);
-            orderField.setOriginOrderId(c);
-            orderField.setGatewayId(gd.getGatewayId());
-            orderField.setContract(contract);
-            orderField.setDirection(dBuy);
-            orderField.setOffsetFlag(offsetFlag);
-            orderField.setPrice(L);
-            orderField.setTotalVolume(origQty);
-            orderField.setTradedVolume(executedQty);
-            orderField.setTradingDay(tradingDay);
+            buildered.orderId(c);
+            buildered.originOrderId(c);
+            buildered.gatewayId(gd.getGatewayId());
+            buildered.contract(contract);
+            buildered.direction(dBuy);
+            buildered.offsetFlag(offsetFlag);
+            buildered.price(L);
+            buildered.totalVolume(origQty);
+            buildered.tradedVolume(executedQty);
+            buildered.tradingDay(tradingDay);
+            buildered.updateTime(LocalTime.now());
             //FILLED 全部成交
             if (X.equals("FILLED")) {
-                orderField.setStatusMsg("全部成交");
-                orderField.setOrderStatus(CoreEnum.OrderStatusEnum.OS_AllTraded);
-                orderField.setUpdateTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
+                buildered.statusMsg("全部成交");
+                buildered.orderStatus(CoreEnum.OrderStatusEnum.OS_AllTraded);
+
             } else if (X.equals("CANCELED")) {
-                orderField.setStatusMsg("已撤单");
-                orderField.setOrderStatus(CoreEnum.OrderStatusEnum.OS_Canceled);
-                orderField.setCancelTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
-                orderField.setUpdateTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
+                buildered.statusMsg("已撤单");
+                buildered.orderStatus(CoreEnum.OrderStatusEnum.OS_Canceled);
             } else if (X.equals("NEW")) {
                 //储存挂单信息
-                orderMap.put(c, orderField.build());
-                orderField.setStatusMsg("已报单").setOrderStatus(CoreEnum.OrderStatusEnum.OS_Unknown);
-                orderField.setSuspendTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
-                orderField.setUpdateTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
+                orderMap.put(c, buildered.build());
+                buildered.statusMsg("已报单").orderStatus(CoreEnum.OrderStatusEnum.OS_Unknown);
             } else if (X.equals("PARTIALLY_FILLED")) {
 
             }
-            feEngine.emitEvent(NorthstarEventType.ORDER, orderField.build());
+            Order build = buildered.build();
+            feEngine.emitEvent(NorthstarEventType.ORDER, build);
             if (X.equals("FILLED")) {
-                feEngine.emitEvent(NorthstarEventType.TRADE, tradeField);
+                feEngine.emitEvent(NorthstarEventType.TRADE, trade);
             }
-            log.info("[{}] 订单反馈：{} {} {} {} {}", orderField.getGatewayId(), orderField.getOrderDate(), orderField.getUpdateTime(), orderField.getOriginOrderId(), orderField.getOrderStatus(), orderField.getStatusMsg());
+            log.info("[{}] 订单反馈：{} {} {} {} {}", build.gatewayId(), build.orderDate(), build.updateTime(), build.originOrderId(), build.orderStatus(), build.statusMsg());
         }
         return getAccountInformation();
     }
@@ -390,19 +395,19 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
     }
 
     @Override
-    public String submitOrder(SubmitOrderReqField submitOrderReq) throws TradeException {
+    public String submitOrder(SubmitOrderReq submitOrderReq) throws TradeException {
         if (!isConnected()) {
             throw new IllegalStateException("网关未连线");
         }
         log.info("[{}] 网关收到下单请求,参数:[{}]", gd.getGatewayId(), submitOrderReq);
         LinkedHashMap<String, Object> parameters = new LinkedHashMap<>();
 
-        CoreField.ContractField contract = submitOrderReq.getContract();
-        CoreEnum.DirectionEnum direction = submitOrderReq.getDirection();
-        CoreEnum.OffsetFlagEnum offsetFlag = submitOrderReq.getOffsetFlag();
-        CoreEnum.TimeConditionEnum timeCondition = submitOrderReq.getTimeCondition();
+        Contract contract = submitOrderReq.contract();
+        CoreEnum.DirectionEnum direction = submitOrderReq.direction();
+        CoreEnum.OffsetFlagEnum offsetFlag = submitOrderReq.offsetFlag();
+        CoreEnum.TimeConditionEnum timeCondition = submitOrderReq.timeCondition();
         //数量 * 最小交易数量
-        double quantity = submitOrderReq.getVolume() * contract.getMultiplier();
+        double quantity = submitOrderReq.volume() * contract.multiplier();
         String side;
         String positionSide;
         String timeInForce;
@@ -419,11 +424,11 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         //开空：卖空SELL、SHORT
         if (CoreEnum.OffsetFlagEnum.OF_Open.getNumber() == offsetFlag.getNumber()) {
             side = (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) ? "BUY" : "SELL";
-            type = (submitOrderReq.getPrice() == 0) ? "MARKET" : "LIMIT";
+            type = (submitOrderReq.price() == 0) ? "MARKET" : "LIMIT";
 
             if ("LIMIT".equals(type)) {
                 parameters.put("timeInForce", timeInForce);
-                parameters.put("price", submitOrderReq.getPrice());
+                parameters.put("price", submitOrderReq.price());
             }
 
             // 持仓方向
@@ -434,25 +439,25 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             //平空：卖空BUY、SHORT
             //平多：卖多SELL、LONG
             side = (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) ? "BUY" : "SELL";
-            type = (submitOrderReq.getPrice() == 0) ? "MARKET" : "LIMIT";
+            type = (submitOrderReq.price() == 0) ? "MARKET" : "LIMIT";
 
             // 平仓方向
             positionSide = (CoreEnum.DirectionEnum.D_Buy.getNumber() == direction.getNumber()) ? "SHORT" : "LONG";
             if ("LIMIT".equals(type)) {
-                parameters.put("price", submitOrderReq.getPrice());
+                parameters.put("price", submitOrderReq.price());
                 parameters.put("timeInForce", timeInForce);
             }
             parameters.put("positionSide", positionSide);
         }
         //订单种类,市价单不传价格
 
-        parameters.put("symbol", contract.getSymbol());
+        parameters.put("symbol", contract.symbol());
         parameters.put("side", side);
         parameters.put("type", type);
         parameters.put("quantity", quantity);
-        parameters.put("newClientOrderId", submitOrderReq.getOriginOrderId());
+        parameters.put("newClientOrderId", submitOrderReq.originOrderId());
 
-        submitOrderReqFieldMap.put(submitOrderReq.getOriginOrderId(), submitOrderReq);
+        submitOrderReqFieldMap.put(submitOrderReq.originOrderId(), submitOrderReq);
         //向币安提交订单
         String s = futuresClient.account().newOrder(parameters);
         log.info("[{}] 网关收到下单返回,响应:[{}]", gd.getGatewayId(), s);
@@ -460,48 +465,47 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         JSONObject orderJson = JSON.parseObject(s);
         //查询全部挂单
         //currentAllOpenOrders();
-        return submitOrderReq.getOriginOrderId();
+        return submitOrderReq.originOrderId();
     }
 
     @NotNull
-    private CoreField.OrderField.Builder getOrderBuilder(CoreEnum.DirectionEnum directionEnum, JSONObject orderJson, CoreField.ContractField contract, CoreEnum.OffsetFlagEnum offsetFlag) {
-        CoreField.OrderField.Builder orderBuilder = CoreField.OrderField.newBuilder();
+    private Order getOrderBuilder(CoreEnum.DirectionEnum directionEnum, JSONObject orderJson, Contract contract, CoreEnum.OffsetFlagEnum offsetFlag) {
+        Order.OrderBuilder orderBuilder = Order.builder();
 
         //数量 * 最小交易数量
-        int origQty = (int) Math.round(orderJson.getDouble("origQty") * Math.pow(10, contract.getQuantityPrecision()));
-        int executedQty = (int) Math.round(orderJson.getDouble("executedQty") * Math.pow(10, contract.getQuantityPrecision()));
-        orderBuilder.setOrderId(orderJson.getString("clientOrderId"));
-        orderBuilder.setOriginOrderId(orderJson.getString("clientOrderId"));
-        orderBuilder.setAccountId(settings.getApiKey());
-        orderBuilder.setDirection(directionEnum);
-        orderBuilder.setOffsetFlag(offsetFlag);
+        int origQty = (int) Math.round(orderJson.getDouble("origQty") * Math.pow(10, contract.quantityPrecision()));
+        int executedQty = (int) Math.round(orderJson.getDouble("executedQty") * Math.pow(10, contract.quantityPrecision()));
+        orderBuilder.orderId(orderJson.getString("clientOrderId"));
+        orderBuilder.originOrderId(orderJson.getString("clientOrderId"));
+        orderBuilder.direction(directionEnum);
+        orderBuilder.offsetFlag(offsetFlag);
         //orderBuilder.setOrderStatus(CoreEnum.OrderStatusEnum.OS_AllTraded);
-        orderBuilder.setPrice(orderJson.getDouble("price"));
-        orderBuilder.setTotalVolume(origQty);
-        orderBuilder.setTradedVolume(executedQty);
-        orderBuilder.setContract(contract);
-        orderBuilder.setGatewayId(gd.getGatewayId());
-        orderBuilder.setStatusMsg("已报单").setOrderStatus(CoreEnum.OrderStatusEnum.OS_Unknown);
-        orderBuilder.setCancelTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
-        orderBuilder.setUpdateTime(LocalTime.now().format(DateTimeConstant.T_FORMAT_FORMATTER));
-        feEngine.emitEvent(NorthstarEventType.ORDER, orderBuilder.build());
-        return orderBuilder;
+        orderBuilder.price(orderJson.getDouble("price"));
+        orderBuilder.totalVolume(origQty);
+        orderBuilder.tradedVolume(executedQty);
+        orderBuilder.contract(contract);
+        orderBuilder.gatewayId(gd.getGatewayId());
+        orderBuilder.statusMsg("已报单").orderStatus(CoreEnum.OrderStatusEnum.OS_Unknown);
+        orderBuilder.updateTime(LocalTime.now());
+        Order order = orderBuilder.build();
+        feEngine.emitEvent(NorthstarEventType.ORDER, order);
+        return order;
     }
 
     @Override
-    public boolean cancelOrder(CancelOrderReqField cancelOrderReq) {
+    public boolean cancelOrder(String originOrderId) {
         if (!isConnected()) {
             throw new IllegalStateException("网关未连线");
         }
         log.info("[{}] 网关收到撤单请求", gd.getGatewayId());
         LinkedHashMap<String, Object> parameters = new LinkedHashMap<>();
-        if (!orderMap.containsKey(cancelOrderReq.getOriginOrderId())) {
+        if (!orderMap.containsKey(originOrderId)) {
             return true;
         }
-        CoreField.OrderField order = orderMap.get(cancelOrderReq.getOriginOrderId());
-        String symbol = order.getContract().getSymbol();
+        Order order = orderMap.get(originOrderId);
+        String symbol = order.contract().symbol();
         parameters.put("symbol", symbol);
-        parameters.put("origClientOrderId", cancelOrderReq.getOriginOrderId());
+        parameters.put("origClientOrderId", originOrderId);
         futuresClient.account().cancelOrder(parameters);
         return true;
     }
