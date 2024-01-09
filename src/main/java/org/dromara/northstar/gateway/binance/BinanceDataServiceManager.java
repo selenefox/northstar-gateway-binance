@@ -102,10 +102,6 @@ public class BinanceDataServiceManager implements IDataSource {
     @Override
     public List<Contract> getAllContracts(CoreEnum.ExchangeEnum exchange) {
         LinkedList<Contract> resultList = new LinkedList<>();
-        List<ContractDefinition> contractDefs = new ArrayList<>();
-//        Gateway gateway = gatewayManager.get(Identifier.of(ChannelType.BIAN.toString()));
-//        settings = (BinanceGatewaySettings) gateway.gatewayDescription().getSettings();
-//        client = new UMFuturesClientImpl(settings.getApiKey(),settings.getSecretKey(), settings.isAccountType() ?  DefaultUrls.USDM_PROD_URL : DefaultUrls.TESTNET_URL);
         client = new UMFuturesClientImpl(settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
 
         try {
@@ -115,9 +111,6 @@ public class BinanceDataServiceManager implements IDataSource {
             for (int i = 0; i < symbols.size(); i++) {
                 JSONObject obj = symbols.getJSONObject(i);
                 BinanceContract contract = new BinanceContract(obj, this);
-                ContractDefinition cnFtTt1 = ContractDefinition.builder().name(contract.name()).exchange(contract.exchange()).productClass(contract.productClass())
-                        .symbolPattern(Pattern.compile("^[A-Z]+@[A-Z]+@[A-Z]+@[A-Z]+$")).commissionRate(3 / 10000D).build();
-                contractDefs.add(cnFtTt1);
                 resultList.add(contract.contract());
             }
         } catch (BinanceConnectorException e) {
