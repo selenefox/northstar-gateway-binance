@@ -18,7 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 public class BinanceConfig {
     static {
         log.info("=====================================================");
-        log.info("                  加载binance                         ");
+        log.info("                 加载gateway-binance                  ");
         log.info("=====================================================");
     }
 

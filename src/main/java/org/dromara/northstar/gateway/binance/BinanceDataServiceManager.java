@@ -1,24 +1,5 @@
 package org.dromara.northstar.gateway.binance;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
-import com.alibaba.fastjson2.JSONObject;
-import com.binance.connector.client.enums.DefaultUrls;
-import com.binance.connector.client.exceptions.BinanceClientException;
-import com.binance.connector.client.exceptions.BinanceConnectorException;
-import com.binance.connector.client.impl.UMFuturesClientImpl;
-
-import org.dromara.northstar.common.IDataSource;
-import org.dromara.northstar.common.ObjectManager;
-import org.dromara.northstar.common.constant.ChannelType;
-import org.dromara.northstar.common.constant.DateTimeConstant;
-import org.dromara.northstar.common.model.Identifier;
-import org.dromara.northstar.common.model.core.Bar;
-import org.dromara.northstar.common.model.core.Contract;
-import org.dromara.northstar.common.model.core.ContractDefinition;
-import org.dromara.northstar.gateway.Gateway;
-import org.springframework.beans.factory.annotation.Autowired;
-
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
@@ -33,6 +14,25 @@ import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.regex.Pattern;
+
+import org.dromara.northstar.common.IDataSource;
+import org.dromara.northstar.common.ObjectManager;
+import org.dromara.northstar.common.constant.ChannelType;
+import org.dromara.northstar.common.constant.DateTimeConstant;
+import org.dromara.northstar.common.model.Identifier;
+import org.dromara.northstar.common.model.core.Bar;
+import org.dromara.northstar.common.model.core.Contract;
+import org.dromara.northstar.common.model.core.ContractDefinition;
+import org.dromara.northstar.gateway.Gateway;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+import com.binance.connector.client.enums.DefaultUrls;
+import com.binance.connector.client.exceptions.BinanceClientException;
+import com.binance.connector.client.exceptions.BinanceConnectorException;
+import com.binance.connector.client.impl.UMFuturesClientImpl;
 
 import lombok.extern.slf4j.Slf4j;
 import xyz.redtorch.pb.CoreEnum;
@@ -137,6 +137,9 @@ public class BinanceDataServiceManager implements IDataSource {
     public List<Bar> getHistoricalData(Contract contract, long startDate, long endDate, String interval) {
         log.debug("历史行情{}数据：{}，{} -> {}", interval, contract.unifiedSymbol(), startDate, endDate);
         Gateway gateway = gatewayManager.get(Identifier.of(ChannelType.BIAN.toString()));
+        if(gateway == null) {
+        	throw new IllegalStateException("未有币安相关网关信息，请先创建一个币安网关");
+        }
         settings = (BinanceGatewaySettings) gateway.gatewayDescription().getSettings();
         client = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey(), settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
         LocalTime actionTime;
@@ -162,7 +165,6 @@ public class BinanceDataServiceManager implements IDataSource {
 
             double volume = Double.parseDouble(s[5]) / quantityPrecision;
             double turnover = Double.parseDouble(s[7]);
-            double numTrades = Double.parseDouble(s[8]);
             barFieldList.addFirst(Bar.builder()
                     .contract(contract)
                     .gatewayId(contract.gatewayId())

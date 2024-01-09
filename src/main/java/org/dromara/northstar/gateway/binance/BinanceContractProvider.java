@@ -1,12 +1,11 @@
 package org.dromara.northstar.gateway.binance;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
-import com.alibaba.fastjson2.JSONObject;
-import com.binance.connector.client.enums.DefaultUrls;
-import com.binance.connector.client.exceptions.BinanceClientException;
-import com.binance.connector.client.exceptions.BinanceConnectorException;
-import com.binance.connector.client.impl.UMFuturesClientImpl;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.dromara.northstar.common.model.core.ContractDefinition;
 import org.dromara.northstar.common.model.core.TimeSlot;
@@ -15,13 +14,13 @@ import org.dromara.northstar.common.utils.DateTimeUtils;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalTime;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+import com.binance.connector.client.enums.DefaultUrls;
+import com.binance.connector.client.exceptions.BinanceClientException;
+import com.binance.connector.client.exceptions.BinanceConnectorException;
+import com.binance.connector.client.impl.UMFuturesClientImpl;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -32,8 +31,6 @@ public class BinanceContractProvider {
 
     private IMarketCenter mktCenter;
 
-    private BinanceGatewaySettings settings;
-
     private BinanceDataServiceManager dataMgr;
 
     UMFuturesClientImpl client;
@@ -43,7 +40,6 @@ public class BinanceContractProvider {
 
     public BinanceContractProvider(BinanceGatewaySettings settings, IMarketCenter mktCenter, BinanceDataServiceManager dataMgr) {
         this.mktCenter = mktCenter;
-        this.settings = settings;
         this.dataMgr = dataMgr;
         this.client = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey(), settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
     }

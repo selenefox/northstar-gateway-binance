@@ -1,14 +1,15 @@
 package org.dromara.northstar.gateway.binance;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONObject;
-import com.binance.connector.client.enums.DefaultUrls;
-import com.binance.connector.client.impl.UMFuturesClientImpl;
-import com.binance.connector.client.impl.UMWebsocketClientImpl;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 
 import org.dromara.northstar.common.constant.ChannelType;
 import org.dromara.northstar.common.constant.ConnectionState;
-import org.dromara.northstar.common.constant.DateTimeConstant;
 import org.dromara.northstar.common.constant.TickType;
 import org.dromara.northstar.common.event.FastEventEngine;
 import org.dromara.northstar.common.event.NorthstarEventType;
@@ -19,20 +20,13 @@ import org.dromara.northstar.common.model.core.Tick;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.MarketGateway;
 
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Timer;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
+import com.binance.connector.client.enums.DefaultUrls;
+import com.binance.connector.client.impl.UMFuturesClientImpl;
+import com.binance.connector.client.impl.UMWebsocketClientImpl;
 
 import lombok.extern.slf4j.Slf4j;
-import xyz.redtorch.pb.CoreField;
 
 @Slf4j
 public class BinanceMarketGatewayAdapter extends GatewayAbstract implements MarketGateway {
@@ -52,8 +46,6 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
     private List<Integer> streamIdList;
 
     private volatile long lastUpdateTickTime = System.currentTimeMillis();
-
-    private Timer statusReportTimer;
 
     public BinanceMarketGatewayAdapter(FastEventEngine feEngine, GatewayDescription gd, IMarketCenter mktCenter) {
         super(gd, mktCenter);
