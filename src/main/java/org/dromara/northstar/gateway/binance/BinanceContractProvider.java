@@ -114,7 +114,7 @@ public class BinanceContractProvider {
                         .name(contract.name())
                         .exchange(contract.exchange())
                         .productClass(contract.productClass())
-                        .symbolPattern(Pattern.compile("^.*$"))
+                        .symbolPattern(Pattern.compile(contract.name() + "@[A-Z]+@[A-Z]+@[A-Z]+$"))
                         .commissionRate(3 / 10000D).dataSource(dataMgr)
                         .tradeTimeDef(TradeTimeDefinition.builder().timeSlots(List.of(allDay)).build())
                         .build();
