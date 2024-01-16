@@ -37,7 +37,7 @@ public class RequestHandler {
     private String sendApiRequest(String baseUrl, String urlPath, String signature, LinkedHashMap<String, Object> parameters,
                                   HttpMethod httpMethod, RequestType requestType, boolean showLimitUsage) {
         String fullUrl = UrlBuilder.buildFullUrl(baseUrl, urlPath, parameters, signature);
-        logger.info("{} {}", httpMethod, fullUrl);
+        logger.debug("{} {}", httpMethod, fullUrl);
         Request request;
         switch (requestType) {
             case PUBLIC:
