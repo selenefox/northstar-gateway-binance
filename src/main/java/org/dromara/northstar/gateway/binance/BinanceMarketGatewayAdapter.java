@@ -187,6 +187,7 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                             .channelType(ChannelType.BIAN)
                             .type(TickType.MARKET_TICK)
                             .build();
+                    mktCenter.onTick(tick);
                     feEngine.emitEvent(NorthstarEventType.TICK, tick);
                     lastUpdateTickTime = System.currentTimeMillis();
                 } else if (kline.equals(stream)) {
