@@ -351,6 +351,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             buildered.tradedVolume(executedQty);
             buildered.tradingDay(tradingDay);
             buildered.updateTime(LocalTime.now());
+            buildered.orderDate(LocalDate.now());
             //FILLED 全部成交
             if (X.equals("FILLED")) {
                 buildered.statusMsg("全部成交");
