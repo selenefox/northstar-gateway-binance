@@ -118,7 +118,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         } catch (Exception t) {
             //断练重新连接
             t.getStackTrace();
-            log.error("账户信息推送断练重新连接");
+            log.info("账户信息推送断练重新连接");
             streamIdList.add(listenUserStream(jsonListenKey, jsonObject));
         }
 
