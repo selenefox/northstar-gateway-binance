@@ -95,6 +95,20 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     @Override
     public void connect() {
+        try {
+            //网关连接
+            connectWork();
+        } catch (Exception t) {
+            //断练重新连接
+            t.getStackTrace();
+            log.error("账户网关重新连接");
+            //断练重新连接
+            this.disconnect();
+            this.connectWork();
+        }
+    }
+
+    private void connectWork() {
         log.debug("[{}] 账户网关连线", gd.getGatewayId());
         connected = true;
         connState = ConnectionState.CONNECTED;
@@ -134,6 +148,9 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             @Override
             public void run() {
                 String result = getAccountInformation();
+                if (ObjectUtil.isEmpty(result)){
+                    return;
+                }
                 JSONObject accountInformation = JSON.parseObject(result);
                 //账户事件
                 getAccountField(accountInformation);
@@ -202,12 +219,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                     return futuresClient.account().accountInformation(new LinkedHashMap<>());
                 } catch (Exception e) {
                     log.error("{} getAccountInformation Exception", e);
-                    try {
-                        Thread.sleep(3000);
-                    } catch (Exception exception) {
-                        log.error("{} getAccountInformation Exception", exception);
-                    }
-                    return futuresClient.account().accountInformation(new LinkedHashMap<>());
+                    return null;
                 }
             }
         }, 5000, 3000);
