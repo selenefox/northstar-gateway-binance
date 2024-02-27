@@ -310,7 +310,10 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         //订单末次成交价格
         Double L = o.getDouble("L");
         SubmitOrderReq orderReq = submitOrderReqFieldMap.get(c);
-
+        //不在Northstar中下的订单不做处理
+        if (ObjectUtil.isEmpty(orderReq)){
+            return getAccountInformation();
+        }
         Contract contract = orderReq.contract();
         Instant e = Instant.ofEpochMilli(T);
 
