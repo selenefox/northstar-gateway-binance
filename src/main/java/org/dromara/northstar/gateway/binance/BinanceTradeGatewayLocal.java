@@ -222,7 +222,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                     return null;
                 }
             }
-        }, 5000, 3000);
+        }, 0, 1000);
     }
 
     private void currentAllOpenOrders() {
