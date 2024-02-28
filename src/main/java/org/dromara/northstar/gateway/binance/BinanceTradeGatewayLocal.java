@@ -394,7 +394,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     @Override
     public void disconnect() {
-        log.debug("[{}] 模拟网关断开", gd.getGatewayId());
+        log.info("[{}] 账户网关断开", gd.getGatewayId());
         Iterator<Integer> iterator = streamIdList.iterator();
         connected = false;
         connState = ConnectionState.DISCONNECTED;
@@ -403,6 +403,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             iterator.remove();
         }
         statusReportTimer.cancel();
+        feEngine.emitEvent(NorthstarEventType.LOGGED_OUT, gd.getGatewayId());
     }
 
     @Override
