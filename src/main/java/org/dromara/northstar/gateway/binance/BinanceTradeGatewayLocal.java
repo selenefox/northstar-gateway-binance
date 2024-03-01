@@ -477,7 +477,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         submitOrderReqFieldMap.put(submitOrderReq.originOrderId(), submitOrderReq);
         //向币安提交订单
         String s = futuresClient.account().newOrder(parameters);
-        log.info("[{}] 网关收到下单返回,响应:[{}]", gd.getGatewayId(), s);
+        log.info("[{}] 网关收到下单返回,响应:[{}]", gd.getGatewayId(), JSON.parseObject(s).get("data"));
 
         JSONObject orderJson = JSON.parseObject(s);
         //查询全部挂单
