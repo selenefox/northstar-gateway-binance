@@ -98,10 +98,9 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         try {
             //网关连接
             connectWork();
-        } catch (Exception t) {
+        } catch (Exception e) {
             //断练重新连接
-            t.getStackTrace();
-            log.error("账户网关重新连接");
+            log.error("账户网关重新连接", e);
             //断练重新连接
             this.disconnect();
             this.connectWork();
@@ -151,7 +150,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                 if (ObjectUtil.isEmpty(result)){
                     return;
                 }
-                JSONObject accountInformation = JSON.parseObject(result);
+                JSONObject accountInformation = JSON.parseObject(result).getJSONObject("data");
                 //账户事件
                 getAccountField(accountInformation);
                 JSONArray positions = accountInformation.getJSONArray("positions");
@@ -227,7 +226,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     private void currentAllOpenOrders() {
         String result = futuresClient.account().currentAllOpenOrders(new LinkedHashMap<>());
-        List<JSONObject> openOrderList = JSON.parseArray(result).stream().map(item -> (JSONObject) item).collect(Collectors.toList());
+        JSONArray data = JSON.parseObject(result).getJSONArray("data");
+        List<JSONObject> openOrderList = data.stream().map(item -> (JSONObject) item).collect(Collectors.toList());
         //维护订单ID和symbol的map
         for (JSONObject order : openOrderList) {
             IContract contract = mktCenter.getContract(ChannelType.BIAN, order.getString("symbol"));

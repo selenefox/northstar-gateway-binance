@@ -106,7 +106,7 @@ public class BinanceDataServiceManager implements IDataSource {
 
         try {
             String result = client.market().exchangeInfo();
-            JSONObject json = JSON.parseObject(result);
+            JSONObject json = JSON.parseObject(result).getJSONObject("data");
             JSONArray symbols = json.getJSONArray("symbols");
             for (int i = 0; i < symbols.size(); i++) {
                 JSONObject obj = symbols.getJSONObject(i);
@@ -144,9 +144,11 @@ public class BinanceDataServiceManager implements IDataSource {
         parameters.put("interval", interval);
         parameters.put("startTime", startDate);
         parameters.put("endTime", endDate);
-        parameters.put("limit", 1500);
+        parameters.put("limit", 1000);
         String result = client.market().klines(parameters);
-        List<String[]> klinesList = JSON.parseArray(result, String[].class);
+        JSONObject jsonObject = JSON.parseObject(result);
+        String data = jsonObject.getJSONArray("data").toJSONString();
+        List<String[]> klinesList = JSON.parseArray(data, String[].class);
         double quantityPrecision = 1 / Math.pow(10, contract.quantityPrecision());
 
         for (String[] s : klinesList) {
