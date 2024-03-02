@@ -123,15 +123,14 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
         //生成listenKey
         String listen = futuresClient.userData().createListenKey();
-        JSONObject jsonListenKey = JSON.parseObject(listen);
+        JSONObject jsonListenKey = JSON.parseObject(listen).getJSONObject("data");
 
         try {
             //Websocket 账户信息推送
             streamIdList.add(listenUserStream(jsonListenKey, jsonObject));
-        } catch (Exception t) {
+        } catch (Exception e) {
             //断练重新连接
-            t.getStackTrace();
-            log.error("账户信息推送断练重新连接");
+            log.error("账户信息推送断练重新连接",e);
             streamIdList.add(listenUserStream(jsonListenKey, jsonObject));
         }
 
