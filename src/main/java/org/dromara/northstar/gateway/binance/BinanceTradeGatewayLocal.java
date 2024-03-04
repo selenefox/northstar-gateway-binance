@@ -146,10 +146,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             @Override
             public void run() {
                 String result = getAccountInformation();
-                if (ObjectUtil.isEmpty(result)){
-                    return;
-                }
-                JSONObject accountInformation = JSON.parseObject(result).getJSONObject("data");
+                JSONObject jsonObject = JSON.parseObject(result);
+                JSONObject accountInformation = jsonObject.getJSONObject("data");
                 //账户事件
                 getAccountField(accountInformation);
                 JSONArray positions = accountInformation.getJSONArray("positions");
@@ -213,12 +211,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             }
 
             private String getAccountInformation() {
-                try {
-                    return futuresClient.account().accountInformation(new LinkedHashMap<>());
-                } catch (Exception e) {
-                    log.error("{} getAccountInformation Exception", e);
-                    return null;
-                }
+                return futuresClient.account().accountInformation(new LinkedHashMap<>());
             }
         }, 0, 1000);
     }

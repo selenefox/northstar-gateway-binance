@@ -144,16 +144,16 @@ public class BinanceDataServiceManager implements IDataSource {
         JSONObject jsonObject = JSON.parseObject(result);
 
         //当前权重值,1m不能超过2400
-        int weight1m = jsonObject.getIntValue("x-mbx-used-weight-1m");
+        /*int weight1m = jsonObject.getIntValue("x-mbx-used-weight-1m");
         log.info("币安API接口1m权重:[{}]", weight1m);
         if (weight1m > 2300) {
             try {
-                log.info("币安API接口1m权重即将达到上限:[{}]", weight1m);
+                log.info("币安API接口1m权重即将达到上限需线程等待1m:[{}]", weight1m);
                 Thread.sleep(60000);
             } catch (Exception e) {
                 log.error("币安API接口1m权重即将达到上限等待异常", e);
             }
-        }
+        }*/
         String data = jsonObject.getJSONArray("data").toJSONString();
         List<String[]> klinesList = JSON.parseArray(data, String[].class);
         double quantityPrecision = 1 / Math.pow(10, contract.quantityPrecision());
