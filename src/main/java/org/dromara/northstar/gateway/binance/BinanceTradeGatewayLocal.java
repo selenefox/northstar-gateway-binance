@@ -66,7 +66,9 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     private ConnectionState connState = ConnectionState.DISCONNECTED;
 
-    private Timer statusReportTimer;
+    private Timer accountInfoTimer;
+
+    private Timer listenKeyTimer;
 
     private IMarketCenter mktCenter;
 
@@ -107,6 +109,21 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         }
     }
 
+    @Override
+    public void disconnect() {
+        log.info("[{}] 账户网关断开", gd.getGatewayId());
+        Iterator<Integer> iterator = streamIdList.iterator();
+        connected = false;
+        connState = ConnectionState.DISCONNECTED;
+        while (iterator.hasNext()) {
+            websocketClient.closeConnection(iterator.next());
+            iterator.remove();
+        }
+        accountInfoTimer.cancel();
+        listenKeyTimer.cancel();
+        feEngine.emitEvent(NorthstarEventType.LOGGED_OUT, gd.getGatewayId());
+    }
+
     private void connectWork() {
         log.debug("[{}] 账户网关连线", gd.getGatewayId());
         connected = true;
@@ -130,19 +147,21 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             streamIdList.add(listenUserStream(jsonListenKey, jsonObject));
         } catch (Exception e) {
             //断练重新连接
-            log.error("账户信息推送断练重新连接",e);
+            log.error("账户信息推送断练重新连接", e);
             streamIdList.add(listenUserStream(jsonListenKey, jsonObject));
         }
 
-        statusReportTimer = new Timer("BinanceGatewayTimelyReport", true);
-        statusReportTimer.scheduleAtFixedRate(new TimerTask() {
+        listenKeyTimer = new Timer("ListenKeyTimer", true);
+        listenKeyTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                //延长listenKey有效期
+                //延长listenKey有效期,有效期延长至本次调用后60分钟
                 futuresClient.userData().extendListenKey();
             }
-        }, 5000, 1800000);
-        statusReportTimer.scheduleAtFixedRate(new TimerTask() {
+        }, 5000, 3000000);
+
+        accountInfoTimer = new Timer("BinanceAccountInfoTimer", true);
+        accountInfoTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
                 String result = getAccountInformation();
@@ -303,7 +322,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         Double L = o.getDouble("L");
         SubmitOrderReq orderReq = submitOrderReqFieldMap.get(c);
         //不在Northstar中下的订单不做处理
-        if (ObjectUtil.isEmpty(orderReq)){
+        if (ObjectUtil.isEmpty(orderReq)) {
             return getAccountInformation();
         }
         Contract contract = orderReq.contract();
@@ -384,19 +403,6 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         return getAccountInformation();
     }
 
-    @Override
-    public void disconnect() {
-        log.info("[{}] 账户网关断开", gd.getGatewayId());
-        Iterator<Integer> iterator = streamIdList.iterator();
-        connected = false;
-        connState = ConnectionState.DISCONNECTED;
-        while (iterator.hasNext()) {
-            websocketClient.closeConnection(iterator.next());
-            iterator.remove();
-        }
-        statusReportTimer.cancel();
-        feEngine.emitEvent(NorthstarEventType.LOGGED_OUT, gd.getGatewayId());
-    }
 
     @Override
     public ConnectionState getConnectionState() {
