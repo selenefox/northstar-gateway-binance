@@ -164,7 +164,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         accountInfoTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                String result = getAccountInformation();
+                String result = futuresClient.account().accountInformation(new LinkedHashMap<>());
                 JSONObject jsonObject = JSON.parseObject(result);
                 JSONObject accountInformation = jsonObject.getJSONObject("data");
                 //账户事件
@@ -229,9 +229,6 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                 }
             }
 
-            private String getAccountInformation() {
-                return futuresClient.account().accountInformation(new LinkedHashMap<>());
-            }
         }, 0, 1000);
     }
 
