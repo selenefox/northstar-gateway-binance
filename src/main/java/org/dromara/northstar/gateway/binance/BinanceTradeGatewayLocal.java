@@ -361,18 +361,15 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             buildered.orderDate(LocalDate.now());
             //FILLED 全部成交
             if (X.equals("FILLED")) {
-                buildered.statusMsg("全部成交");
-                buildered.orderStatus(CoreEnum.OrderStatusEnum.OS_AllTraded);
-
+                buildered.statusMsg("全部成交").orderStatus(CoreEnum.OrderStatusEnum.OS_AllTraded);
             } else if (X.equals("CANCELED")) {
-                buildered.statusMsg("已撤单");
-                buildered.orderStatus(CoreEnum.OrderStatusEnum.OS_Canceled);
+                buildered.statusMsg("已撤单").orderStatus(CoreEnum.OrderStatusEnum.OS_Canceled);
             } else if (X.equals("NEW")) {
                 //储存挂单信息
                 orderMap.put(c, buildered.build());
-                buildered.statusMsg("已报单").orderStatus(CoreEnum.OrderStatusEnum.OS_Unknown);
+                buildered.statusMsg("已报单").orderStatus(CoreEnum.OrderStatusEnum.OS_NoTradeQueueing);
             } else if (X.equals("PARTIALLY_FILLED")) {
-
+                buildered.statusMsg("部分成交还在队列中").orderStatus(CoreEnum.OrderStatusEnum.OS_PartTradedQueueing);
             }
             Order build = buildered.build();
             feEngine.emitEvent(NorthstarEventType.ORDER, build);
