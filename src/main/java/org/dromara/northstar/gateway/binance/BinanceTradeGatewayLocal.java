@@ -361,6 +361,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             buildered.orderDate(LocalDate.now());
             //FILLED 全部成交
             if (X.equals("FILLED")) {
+                //清除挂单信息
+                orderMap.remove(c);
                 buildered.statusMsg("全部成交").orderStatus(CoreEnum.OrderStatusEnum.OS_AllTraded);
             } else if (X.equals("CANCELED")) {
                 buildered.statusMsg("已撤单").orderStatus(CoreEnum.OrderStatusEnum.OS_Canceled);
