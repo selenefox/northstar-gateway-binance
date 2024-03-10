@@ -200,7 +200,6 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                         int positionAmt = Math.abs(Double.valueOf(position.getDouble("positionAmt") / contracted.multiplier()).intValue());
                         Double useMargin = position.getDouble("positionInitialMargin");
                         Double unrealizedProfit = position.getDouble("unrealizedProfit");
-                        Double positionInitialMargin = position.getDouble("positionInitialMargin");
                         Position pos = Position.builder()
                                 .positionId(contracted.unifiedSymbol() + "@" + posDir)
                                 .gatewayId(gd.getGatewayId())
@@ -217,8 +216,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
                                 .positionProfit(unrealizedProfit)
                                 .positionProfitRatio(useMargin == 0 ? 0 : unrealizedProfit / useMargin)
                                 .contractValue(unrealizedProfit)
-                                .useMargin(positionInitialMargin)
-                                .exchangeMargin(positionInitialMargin)
+                                .useMargin(useMargin)
+                                .exchangeMargin(useMargin)
                                 .updateTimestamp(position.getLong("updateTime"))
                                 .build();
                         logger.trace("合成持仓对象：{}", JSON.toJSONString(pos));
