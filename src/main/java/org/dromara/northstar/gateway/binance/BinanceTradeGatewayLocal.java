@@ -372,7 +372,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             } else if (X.equals("NEW")) {
                 //储存挂单信息
                 orderMap.put(c, buildered.build());
-                buildered.statusMsg("已报单").orderStatus(CoreEnum.OrderStatusEnum.OS_NoTradeQueueing);
+                buildered.statusMsg("已挂单").orderStatus(CoreEnum.OrderStatusEnum.OS_NoTradeQueueing);
             } else if (X.equals("PARTIALLY_FILLED")) {
                 buildered.statusMsg("部分成交还在队列中").orderStatus(CoreEnum.OrderStatusEnum.OS_PartTradedQueueing);
             }
@@ -503,7 +503,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         orderBuilder.tradedVolume(executedQty);
         orderBuilder.contract(contract);
         orderBuilder.gatewayId(gd.getGatewayId());
-        orderBuilder.statusMsg("已报单").orderStatus(CoreEnum.OrderStatusEnum.OS_Unknown);
+        orderBuilder.statusMsg("已挂单").orderStatus(CoreEnum.OrderStatusEnum.OS_NoTradeQueueing);
         orderBuilder.updateTime(LocalTime.now());
         Order order = orderBuilder.build();
         feEngine.emitEvent(NorthstarEventType.ORDER, order);
