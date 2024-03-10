@@ -16,6 +16,7 @@ import org.dromara.northstar.common.exception.TradeException;
 import org.dromara.northstar.common.model.GatewayDescription;
 import org.dromara.northstar.common.model.core.Account;
 import org.dromara.northstar.common.model.core.Contract;
+import org.dromara.northstar.common.model.core.Notice;
 import org.dromara.northstar.common.model.core.Order;
 import org.dromara.northstar.common.model.core.Position;
 import org.dromara.northstar.common.model.core.SubmitOrderReq;
@@ -260,7 +261,10 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             log.info("账户信息推送:[{}]", event);
             JSONObject eventJson = JSON.parseObject(event);
             switch (eventJson.getString("e")) {
+                //订单/交易 更新推送
                 case "ORDER_TRADE_UPDATE" -> orderTradeUpdate(eventJson);
+                //当用户持仓风险过高，会推送此消息
+                case "MARGIN_CALL" -> marginCall(eventJson);
                 //case "ACCOUNT_UPDATE" ->
             }
 
@@ -382,6 +386,27 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         }
     }
 
+    /**
+     * <br>Description:保证金追加通知
+     * <br>Author: 李嘉豪
+     * <br>Date:2024年03月10日
+     *
+     * @param e 保证金追加通知事件
+     * @see <a href="https://binance-docs.github.io/apidocs/futures/cn/#145a4121d8">
+     */
+    private void marginCall(JSONObject e) {
+        JSONArray p = e.getJSONArray("p");
+        List<JSONObject> positionList = p.stream().map(item -> (JSONObject) item).toList();
+
+        for (JSONObject position : positionList) {
+            feEngine.emitEvent(NorthstarEventType.NOTICE, Notice.builder()
+                    .content(String.format("保证金追加通知-[%s-%s]-仓位-[%s]-标记价格-[%s]-未实现盈亏-[%s],持仓需要的维持保证金-[%s],钱包余额-[%s]",
+                            position.getString("s"), position.getString("ps"), position.getString("pa"),
+                            position.getString("mp"), position.getString("up"), position.getString("mm"), e.getString("cw")))
+                    .status(CoreEnum.CommonStatusEnum.COMS_WARN)
+                    .build());
+        }
+    }
 
     @Override
     public ConnectionState getConnectionState() {
