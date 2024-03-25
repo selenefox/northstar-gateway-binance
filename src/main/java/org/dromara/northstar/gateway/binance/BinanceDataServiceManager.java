@@ -90,12 +90,12 @@ public class BinanceDataServiceManager implements IDataSource {
     }
 
     @Override
-    public List<LocalDate> getHolidays(CoreEnum.ExchangeEnum exchange, LocalDate startDate, LocalDate endDate) {
+    public List<LocalDate> getHolidays(ChannelType exchange, LocalDate startDate, LocalDate endDate) {
         return Collections.emptyList();
     }
 
     @Override
-    public List<Contract> getAllContracts(CoreEnum.ExchangeEnum exchange) {
+    public List<Contract> getAllContracts() {
         LinkedList<Contract> resultList = new LinkedList<>();
         client = new UMFuturesClientImpl(settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
 
@@ -115,11 +115,6 @@ public class BinanceDataServiceManager implements IDataSource {
                     e.getMessage(), e.getErrMsg(), e.getErrorCode(), e.getHttpStatusCode(), e);
         }
         return resultList;
-    }
-
-    @Override
-    public List<CoreEnum.ExchangeEnum> getUserAvailableExchanges() {
-        return Collections.singletonList(CoreEnum.ExchangeEnum.BINANCE);
     }
 
     public List<Bar> getHistoricalData(Contract contract, long startDate, long endDate, String interval) {
