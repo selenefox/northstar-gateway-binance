@@ -1,11 +1,15 @@
 # northstar-gateway-binance
 
+## 简介
 northstar盈富量化平台币安网关接口实现
 
 使用时，需要依赖 northstar 主程序进行加载，详情参考 https://gitee.com/dromara/northstar
 
-## 如何使用
 
+
+如果你还没有币安账号：[注册页面](https://accounts.suitechsui.io/register?ref=776061603)（通过链接注册，享受交易返现优惠政策）
+
+## 如何使用
 
 1. **如何使用币安网关**
    1. **创建BIAN网关行情：** 网关配置中的API Key、Secret Key需要在币安官网申请，币安官网也提供了一套完整的模拟交易环境。
