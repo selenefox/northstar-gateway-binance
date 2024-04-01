@@ -50,7 +50,7 @@ public class BinanceContractProvider {
 
             //查询持仓模式
             String positionMode = client.account().getCurrentPositionMode(new LinkedHashMap<>());
-            JSONObject positionModeJson = JSON.parseObject(positionMode);
+            JSONObject positionModeJson = JSON.parseObject(positionMode).getJSONObject("data");
 
             Boolean dualSidePosition = positionModeJson.getBoolean("dualSidePosition");
             //单向持仓模式需要修改为双向持仓模式
@@ -65,11 +65,11 @@ public class BinanceContractProvider {
             //账户信息V2
             String account = client.account().accountInformation(new LinkedHashMap<>());
 
-            JSONObject json = JSON.parseObject(result);
+            JSONObject json = JSON.parseObject(result).getJSONObject("data");;
             JSONArray symbols = json.getJSONArray("symbols");
 
             //更新合约多头空头保证金率
-            JSONObject jsonObject = JSON.parseObject(account);
+            JSONObject jsonObject = JSON.parseObject(account).getJSONObject("data");
             JSONArray positions = jsonObject.getJSONArray("positions");
 
             //多头Map
@@ -105,7 +105,7 @@ public class BinanceContractProvider {
 
         try {
             String result = client.market().exchangeInfo();
-            JSONObject json = JSON.parseObject(result);
+            JSONObject json = JSON.parseObject(result).getJSONObject("data");
             JSONArray symbols = json.getJSONArray("symbols");
             for (int i = 0; i < symbols.size(); i++) {
                 JSONObject obj = symbols.getJSONObject(i);

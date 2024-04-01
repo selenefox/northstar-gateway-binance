@@ -222,11 +222,11 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                     feEngine.emitEvent(NorthstarEventType.BAR, bar);
                 }
 
-            } catch (Throwable t) {
+            } catch (Exception t) {
                 log.error("{} OnRtnDepthMarketData Exception", logInfo, t);
                 //断练重新连接
-                int klineStreamId = getSymbolStreams(symbol, contract);
-                streamIdList.add(klineStreamId);
+                this.disconnect();
+                this.connect();
             }
         }));
     }

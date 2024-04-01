@@ -16,6 +16,7 @@ import org.dromara.northstar.common.exception.TradeException;
 import org.dromara.northstar.common.model.GatewayDescription;
 import org.dromara.northstar.common.model.core.Account;
 import org.dromara.northstar.common.model.core.Contract;
+import org.dromara.northstar.common.model.core.Notice;
 import org.dromara.northstar.common.model.core.Order;
 import org.dromara.northstar.common.model.core.Position;
 import org.dromara.northstar.common.model.core.SubmitOrderReq;
@@ -24,7 +25,6 @@ import org.dromara.northstar.gateway.IContract;
 import org.dromara.northstar.gateway.IMarketCenter;
 import org.dromara.northstar.gateway.TradeGateway;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,7 +42,6 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -66,7 +65,9 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     private ConnectionState connState = ConnectionState.DISCONNECTED;
 
-    private Timer statusReportTimer;
+    private Timer accountInfoTimer;
+
+    private Timer listenKeyTimer;
 
     private IMarketCenter mktCenter;
 
@@ -95,6 +96,34 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     @Override
     public void connect() {
+        try {
+            //网关连接
+            connectWork();
+        } catch (Exception e) {
+            //断练重新连接
+            log.error("账户网关重新连接", e);
+            //断练重新连接
+            this.disconnect();
+            this.connectWork();
+        }
+    }
+
+    @Override
+    public void disconnect() {
+        log.info("[{}] 账户网关断开", gd.getGatewayId());
+        Iterator<Integer> iterator = streamIdList.iterator();
+        connected = false;
+        connState = ConnectionState.DISCONNECTED;
+        while (iterator.hasNext()) {
+            websocketClient.closeConnection(iterator.next());
+            iterator.remove();
+        }
+        accountInfoTimer.cancel();
+        listenKeyTimer.cancel();
+        feEngine.emitEvent(NorthstarEventType.LOGGED_OUT, gd.getGatewayId());
+    }
+
+    private void connectWork() {
         log.debug("[{}] 账户网关连线", gd.getGatewayId());
         connected = true;
         connState = ConnectionState.CONNECTED;
@@ -102,120 +131,109 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         CompletableFuture.runAsync(() -> feEngine.emitEvent(NorthstarEventType.GATEWAY_READY, gd.getGatewayId()),
                 CompletableFuture.delayedExecutor(2, TimeUnit.SECONDS));
 
-        //获取账户信息
-        AtomicReference<JSONObject> jsonObject = new AtomicReference<>(getAccountInformation());
-
         //查询全部挂单
         currentAllOpenOrders();
 
         //生成listenKey
         String listen = futuresClient.userData().createListenKey();
-        JSONObject jsonListenKey = JSON.parseObject(listen);
+        JSONObject jsonListenKey = JSON.parseObject(listen).getJSONObject("data");
 
         try {
             //Websocket 账户信息推送
-            streamIdList.add(listenUserStream(jsonListenKey, jsonObject));
-        } catch (Exception t) {
+            streamIdList.add(listenUserStream(jsonListenKey));
+        } catch (Exception e) {
             //断练重新连接
-            t.getStackTrace();
-            log.error("账户信息推送断练重新连接");
-            streamIdList.add(listenUserStream(jsonListenKey, jsonObject));
+            log.error("账户信息推送断练重新连接", e);
+            streamIdList.add(listenUserStream(jsonListenKey));
         }
 
-        statusReportTimer = new Timer("BinanceGatewayTimelyReport", true);
-        statusReportTimer.scheduleAtFixedRate(new TimerTask() {
+        listenKeyTimer = new Timer("ListenKeyTimer", true);
+        listenKeyTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                //延长listenKey有效期
+                //延长listenKey有效期,有效期延长至本次调用后60分钟
                 futuresClient.userData().extendListenKey();
             }
-        }, 5000, 1800000);
-        statusReportTimer.scheduleAtFixedRate(new TimerTask() {
+        }, 5000, 3000000);
+
+        accountInfoTimer = new Timer("BinanceAccountInfoTimer", true);
+        accountInfoTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                String result = getAccountInformation();
-                JSONObject accountInformation = JSON.parseObject(result);
-                //账户事件
-                getAccountField(accountInformation);
-                JSONArray positions = accountInformation.getJSONArray("positions");
-                List<JSONObject> positionList = positions.stream().map(item -> (JSONObject) item).filter(item -> item.getDouble("positionAmt") != 0).collect(Collectors.toList());
-                //当前持仓map
-                Map<String, JSONObject> newPositionMap = positionList.stream().collect(Collectors.toMap(dto -> dto.getString("symbol") + "@" + dto.getString("positionSide"), Function.identity(), (a, b) -> a, HashMap::new));
-                //新持仓加入到positionMap
-                for (JSONObject position : positionList) {
-                    String symbol = position.getString("symbol");
-                    String positionSide = position.getString("positionSide");
-                    String key = symbol + "@" + positionSide;
-                    if (!positionMap.containsKey(key)) {
-                        positionMap.put(key, position);
-                    }
-                }
-                //查出平仓的合约发送持仓事件-持仓数量为0
-                Iterator<String> iterator = positionMap.keySet().iterator();
-                while (iterator.hasNext()) {
-                    String key = iterator.next();
-                    // positionMap中存在但是newPositionMap没有的position
-                    if (!newPositionMap.containsKey(key)) {
-                        JSONObject closeAPosition = positionMap.get(key);
-                        closeAPosition.put("positionAmt", 0);
-                        positionList.add(closeAPosition);
-                    }
-                }
-                for (JSONObject position : positionList) {
-                    String symbol = position.getString("symbol");
-                    String positionSide = position.getString("positionSide");
-                    CoreEnum.PositionDirectionEnum posDir = "LONG".equals(positionSide) ? CoreEnum.PositionDirectionEnum.PD_Long : CoreEnum.PositionDirectionEnum.PD_Short;
-                    IContract contract = mktCenter.getContract(ChannelType.BIAN, symbol);
-                    Contract contracted = contract.contract();
-                    //持仓数量按照最小交易精度转换
-                    int positionAmt = Math.abs(Double.valueOf(position.getDouble("positionAmt") / contracted.multiplier()).intValue());
-                    Double useMargin = position.getDouble("positionInitialMargin");
-                    Double unrealizedProfit = position.getDouble("unrealizedProfit");
-                    Double positionInitialMargin = position.getDouble("positionInitialMargin");
-                    Position pos = Position.builder()
-                            .positionId(contracted.unifiedSymbol() + "@" + posDir)
-                            .gatewayId(gd.getGatewayId())
-                            .positionDirection(posDir)
-                            .position(positionAmt)
-                            .tdPosition(positionAmt)
-                            .ydPosition(positionAmt)
-                            .contract(contracted)
-                            //.frozen(frozen)
-                            //.tdFrozen(tdFrozen)
-                            //.ydFrozen(ydFrozen)
-                            .openPrice(position.getDouble("entryPrice"))
-                            .openPriceDiff(unrealizedProfit)
-                            .positionProfit(unrealizedProfit)
-                            .positionProfitRatio(useMargin == 0 ? 0 : unrealizedProfit / useMargin)
-                            .contractValue(unrealizedProfit)
-                            .useMargin(positionInitialMargin)
-                            .exchangeMargin(positionInitialMargin)
-                            .updateTimestamp(position.getLong("updateTime"))
-                            .build();
-                    logger.trace("合成持仓对象：{}", JSON.toJSONString(pos));
-                    feEngine.emitEvent(NorthstarEventType.POSITION, pos);
-                }
-            }
-
-            private String getAccountInformation() {
                 try {
-                    return futuresClient.account().accountInformation(new LinkedHashMap<>());
-                } catch (Exception e) {
-                    log.error("{} getAccountInformation Exception", e);
-                    try {
-                        Thread.sleep(3000);
-                    } catch (Exception exception) {
-                        log.error("{} getAccountInformation Exception", exception);
+                    String result = futuresClient.account().accountInformation(new LinkedHashMap<>());
+                    JSONObject jsonObject = JSON.parseObject(result);
+                    JSONObject accountInformation = jsonObject.getJSONObject("data");
+                    //账户事件
+                    getAccountField(accountInformation);
+                    JSONArray positions = accountInformation.getJSONArray("positions");
+                    List<JSONObject> positionList = positions.stream().map(item -> (JSONObject) item).filter(item -> item.getDouble("positionAmt") != 0).collect(Collectors.toList());
+                    //当前持仓map
+                    Map<String, JSONObject> newPositionMap = positionList.stream().collect(Collectors.toMap(dto -> dto.getString("symbol") + "@" + dto.getString("positionSide"), Function.identity(), (a, b) -> a, HashMap::new));
+                    //新持仓加入到positionMap
+                    for (JSONObject position : positionList) {
+                        String symbol = position.getString("symbol");
+                        String positionSide = position.getString("positionSide");
+                        String key = symbol + "@" + positionSide;
+                        if (!positionMap.containsKey(key)) {
+                            positionMap.put(key, position);
+                        }
                     }
-                    return futuresClient.account().accountInformation(new LinkedHashMap<>());
+                    //查出平仓的合约发送持仓事件-持仓数量为0
+                    Iterator<String> iterator = positionMap.keySet().iterator();
+                    while (iterator.hasNext()) {
+                        String key = iterator.next();
+                        // positionMap中存在但是newPositionMap没有的position
+                        if (!newPositionMap.containsKey(key)) {
+                            JSONObject closeAPosition = positionMap.get(key);
+                            closeAPosition.put("positionAmt", 0);
+                            positionList.add(closeAPosition);
+                        }
+                    }
+                    for (JSONObject position : positionList) {
+                        String symbol = position.getString("symbol");
+                        String positionSide = position.getString("positionSide");
+                        CoreEnum.PositionDirectionEnum posDir = "LONG".equals(positionSide) ? CoreEnum.PositionDirectionEnum.PD_Long : CoreEnum.PositionDirectionEnum.PD_Short;
+                        IContract contract = mktCenter.getContract(ChannelType.BIAN, symbol);
+                        Contract contracted = contract.contract();
+                        //持仓数量按照最小交易精度转换
+                        int positionAmt = Math.abs(Double.valueOf(position.getDouble("positionAmt") / contracted.multiplier()).intValue());
+                        Double useMargin = position.getDouble("positionInitialMargin");
+                        Double unrealizedProfit = position.getDouble("unrealizedProfit");
+                        Position pos = Position.builder()
+                                .positionId(contracted.unifiedSymbol() + "@" + posDir)
+                                .gatewayId(gd.getGatewayId())
+                                .positionDirection(posDir)
+                                .position(positionAmt)
+                                .tdPosition(positionAmt)
+                                .ydPosition(positionAmt)
+                                .contract(contracted)
+                                //.frozen(frozen)
+                                //.tdFrozen(tdFrozen)
+                                //.ydFrozen(ydFrozen)
+                                .openPrice(position.getDouble("entryPrice"))
+                                .openPriceDiff(unrealizedProfit)
+                                .positionProfit(unrealizedProfit)
+                                .positionProfitRatio(useMargin == 0 ? 0 : unrealizedProfit / useMargin)
+                                .contractValue(unrealizedProfit)
+                                .useMargin(useMargin)
+                                .exchangeMargin(useMargin)
+                                .updateTimestamp(position.getLong("updateTime"))
+                                .build();
+                        logger.trace("合成持仓对象：{}", JSON.toJSONString(pos));
+                        feEngine.emitEvent(NorthstarEventType.POSITION, pos);
+                    }
+                } catch (Exception e) {
+                    log.error("账户事件-持仓时事件异常", e);
                 }
             }
-        }, 5000, 3000);
+        }, 0, 1000);
     }
 
     private void currentAllOpenOrders() {
         String result = futuresClient.account().currentAllOpenOrders(new LinkedHashMap<>());
-        List<JSONObject> openOrderList = JSON.parseArray(result).stream().map(item -> (JSONObject) item).collect(Collectors.toList());
+        JSONArray data = JSON.parseObject(result).getJSONArray("data");
+        List<JSONObject> openOrderList = data.stream().map(item -> (JSONObject) item).collect(Collectors.toList());
         //维护订单ID和symbol的map
         for (JSONObject order : openOrderList) {
             IContract contract = mktCenter.getContract(ChannelType.BIAN, order.getString("symbol"));
@@ -236,28 +254,22 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         }
     }
 
-    private int listenUserStream(JSONObject jsonListenKey, AtomicReference<JSONObject> jsonObject) {
+    private int listenUserStream(JSONObject jsonListenKey) {
         //账户信息推送
         return websocketClient.listenUserStream(jsonListenKey.getString("listenKey"), ((event) -> {
             log.info("账户信息推送:[{}]", event);
             JSONObject eventJson = JSON.parseObject(event);
             switch (eventJson.getString("e")) {
-                case "ORDER_TRADE_UPDATE" -> jsonObject.set(orderTradeUpdate(eventJson));
-                case "ACCOUNT_UPDATE" -> jsonObject.set(accountUpdate(eventJson));
+                //订单/交易 更新推送
+                case "ORDER_TRADE_UPDATE" -> orderTradeUpdate(eventJson);
+                //当用户持仓风险过高，会推送此消息
+                case "MARGIN_CALL" -> marginCall(eventJson);
+                //case "ACCOUNT_UPDATE" ->
             }
 
         }));
     }
 
-    @Nullable
-    private JSONObject getAccountInformation() {
-        String result = futuresClient.account().accountInformation(new LinkedHashMap<>());
-        //更新合约多头空头保证金率，添加持仓回报事件
-        JSONObject jsonObject = JSON.parseObject(result);
-        return jsonObject;
-    }
-
-    @NotNull
     private void getAccountField(JSONObject jsonObject) {
         Account accountBuilder = Account.builder()
                 .accountId(gd.getGatewayId())
@@ -274,13 +286,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         feEngine.emitEvent(NorthstarEventType.ACCOUNT, accountBuilder);
     }
 
-    //Balance和Position更新推送
-    private JSONObject accountUpdate(JSONObject eventJson) {
-        return getAccountInformation();
-    }
-
     //订单/交易 更新推送
-    private JSONObject orderTradeUpdate(JSONObject json) {
+    private void orderTradeUpdate(JSONObject json) {
         JSONObject o = json.getJSONObject("o");
         //订单当前状态
         String X = o.getString("X");
@@ -298,7 +305,10 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         //订单末次成交价格
         Double L = o.getDouble("L");
         SubmitOrderReq orderReq = submitOrderReqFieldMap.get(c);
-
+        //不在Northstar中下的订单不做处理
+        if (ObjectUtil.isEmpty(orderReq)) {
+            return;
+        }
         Contract contract = orderReq.contract();
         Instant e = Instant.ofEpochMilli(T);
 
@@ -354,18 +364,17 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             buildered.orderDate(LocalDate.now());
             //FILLED 全部成交
             if (X.equals("FILLED")) {
-                buildered.statusMsg("全部成交");
-                buildered.orderStatus(CoreEnum.OrderStatusEnum.OS_AllTraded);
-
+                //清除挂单信息
+                orderMap.remove(c);
+                buildered.statusMsg("全部成交").orderStatus(CoreEnum.OrderStatusEnum.OS_AllTraded);
             } else if (X.equals("CANCELED")) {
-                buildered.statusMsg("已撤单");
-                buildered.orderStatus(CoreEnum.OrderStatusEnum.OS_Canceled);
+                buildered.statusMsg("已撤单").orderStatus(CoreEnum.OrderStatusEnum.OS_Canceled);
             } else if (X.equals("NEW")) {
                 //储存挂单信息
                 orderMap.put(c, buildered.build());
-                buildered.statusMsg("已报单").orderStatus(CoreEnum.OrderStatusEnum.OS_Unknown);
+                buildered.statusMsg("已挂单").orderStatus(CoreEnum.OrderStatusEnum.OS_NoTradeQueueing);
             } else if (X.equals("PARTIALLY_FILLED")) {
-
+                buildered.statusMsg("部分成交还在队列中").orderStatus(CoreEnum.OrderStatusEnum.OS_PartTradedQueueing);
             }
             Order build = buildered.build();
             feEngine.emitEvent(NorthstarEventType.ORDER, build);
@@ -374,20 +383,28 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
             }
             log.info("[{}] 订单反馈：{} {} {} {} {}", build.gatewayId(), build.orderDate(), build.updateTime(), build.originOrderId(), build.orderStatus(), build.statusMsg());
         }
-        return getAccountInformation();
     }
 
-    @Override
-    public void disconnect() {
-        log.debug("[{}] 模拟网关断开", gd.getGatewayId());
-        Iterator<Integer> iterator = streamIdList.iterator();
-        connected = false;
-        connState = ConnectionState.DISCONNECTED;
-        while (iterator.hasNext()) {
-            websocketClient.closeConnection(iterator.next());
-            iterator.remove();
+    /**
+     * <br>Description:保证金追加通知
+     * <br>Author: 李嘉豪
+     * <br>Date:2024年03月10日
+     *
+     * @param e 保证金追加通知事件
+     * @see <a href="https://binance-docs.github.io/apidocs/futures/cn/#145a4121d8">
+     */
+    private void marginCall(JSONObject e) {
+        JSONArray p = e.getJSONArray("p");
+        List<JSONObject> positionList = p.stream().map(item -> (JSONObject) item).toList();
+
+        for (JSONObject position : positionList) {
+            feEngine.emitEvent(NorthstarEventType.NOTICE, Notice.builder()
+                    .content(String.format("保证金追加通知-[%s-%s]-仓位-[%s]-标记价格-[%s]-未实现盈亏-[%s],持仓需要的维持保证金-[%s],钱包余额-[%s]",
+                            position.getString("s"), position.getString("ps"), position.getString("pa"),
+                            position.getString("mp"), position.getString("up"), position.getString("mm"), e.getString("cw")))
+                    .status(CoreEnum.CommonStatusEnum.COMS_WARN)
+                    .build());
         }
-        statusReportTimer.cancel();
     }
 
     @Override
@@ -461,7 +478,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         submitOrderReqFieldMap.put(submitOrderReq.originOrderId(), submitOrderReq);
         //向币安提交订单
         String s = futuresClient.account().newOrder(parameters);
-        log.info("[{}] 网关收到下单返回,响应:[{}]", gd.getGatewayId(), s);
+        log.info("[{}] 网关收到下单返回,响应:[{}]", gd.getGatewayId(), JSON.parseObject(s).get("data"));
 
         JSONObject orderJson = JSON.parseObject(s);
         //查询全部挂单
@@ -486,7 +503,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         orderBuilder.tradedVolume(executedQty);
         orderBuilder.contract(contract);
         orderBuilder.gatewayId(gd.getGatewayId());
-        orderBuilder.statusMsg("已报单").orderStatus(CoreEnum.OrderStatusEnum.OS_Unknown);
+        orderBuilder.statusMsg("已挂单").orderStatus(CoreEnum.OrderStatusEnum.OS_NoTradeQueueing);
         orderBuilder.updateTime(LocalTime.now());
         Order order = orderBuilder.build();
         feEngine.emitEvent(NorthstarEventType.ORDER, order);

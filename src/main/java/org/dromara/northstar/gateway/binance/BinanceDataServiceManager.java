@@ -50,11 +50,6 @@ public class BinanceDataServiceManager implements IDataSource {
     @Autowired
     private ObjectManager<Gateway> gatewayManager;
 
-    String format = LocalDate.now().format(DateTimeConstant.D_FORMAT_INT_FORMATTER);
-
-    SimpleDateFormat sdf = new SimpleDateFormat("HHmmssSSS");
-
-
     private UMFuturesClientImpl client;
 
     @Override
@@ -95,18 +90,18 @@ public class BinanceDataServiceManager implements IDataSource {
     }
 
     @Override
-    public List<LocalDate> getHolidays(CoreEnum.ExchangeEnum exchange, LocalDate startDate, LocalDate endDate) {
+    public List<LocalDate> getHolidays(ChannelType exchange, LocalDate startDate, LocalDate endDate) {
         return Collections.emptyList();
     }
 
     @Override
-    public List<Contract> getAllContracts(CoreEnum.ExchangeEnum exchange) {
+    public List<Contract> getAllContracts() {
         LinkedList<Contract> resultList = new LinkedList<>();
         client = new UMFuturesClientImpl(settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
 
         try {
             String result = client.market().exchangeInfo();
-            JSONObject json = JSON.parseObject(result);
+            JSONObject json = JSON.parseObject(result).getJSONObject("data");
             JSONArray symbols = json.getJSONArray("symbols");
             for (int i = 0; i < symbols.size(); i++) {
                 JSONObject obj = symbols.getJSONObject(i);
@@ -120,11 +115,6 @@ public class BinanceDataServiceManager implements IDataSource {
                     e.getMessage(), e.getErrMsg(), e.getErrorCode(), e.getHttpStatusCode(), e);
         }
         return resultList;
-    }
-
-    @Override
-    public List<CoreEnum.ExchangeEnum> getUserAvailableExchanges() {
-        return Collections.singletonList(CoreEnum.ExchangeEnum.BINANCE);
     }
 
     public List<Bar> getHistoricalData(Contract contract, long startDate, long endDate, String interval) {
@@ -144,9 +134,23 @@ public class BinanceDataServiceManager implements IDataSource {
         parameters.put("interval", interval);
         parameters.put("startTime", startDate);
         parameters.put("endTime", endDate);
-        parameters.put("limit", 1500);
+        parameters.put("limit", 1000);
         String result = client.market().klines(parameters);
-        List<String[]> klinesList = JSON.parseArray(result, String[].class);
+        JSONObject jsonObject = JSON.parseObject(result);
+
+        //当前权重值,1m不能超过2400
+        /*int weight1m = jsonObject.getIntValue("x-mbx-used-weight-1m");
+        log.info("币安API接口1m权重:[{}]", weight1m);
+        if (weight1m > 2300) {
+            try {
+                log.info("币安API接口1m权重即将达到上限需线程等待1m:[{}]", weight1m);
+                Thread.sleep(60000);
+            } catch (Exception e) {
+                log.error("币安API接口1m权重即将达到上限等待异常", e);
+            }
+        }*/
+        String data = jsonObject.getJSONArray("data").toJSONString();
+        List<String[]> klinesList = JSON.parseArray(data, String[].class);
         double quantityPrecision = 1 / Math.pow(10, contract.quantityPrecision());
 
         for (String[] s : klinesList) {
