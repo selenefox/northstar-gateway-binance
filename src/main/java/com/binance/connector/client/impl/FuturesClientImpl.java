@@ -18,7 +18,7 @@ public abstract class FuturesClientImpl implements FuturesClient {
     }
 
     public FuturesClientImpl(String apiKey, String secretKey, String baseUrl, String product) {
-        this(apiKey, secretKey, baseUrl, product, false);
+        this(apiKey, secretKey, baseUrl, product, true);
     }
 
     public FuturesClientImpl(String apiKey, String secretKey, String baseUrl, String product, boolean showLimitUsage) {
