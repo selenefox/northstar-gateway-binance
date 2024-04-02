@@ -138,14 +138,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         String listen = futuresClient.userData().createListenKey();
         JSONObject jsonListenKey = JSON.parseObject(listen).getJSONObject("data");
 
-        try {
-            //Websocket 账户信息推送
-            streamIdList.add(listenUserStream(jsonListenKey));
-        } catch (Exception e) {
-            //断练重新连接
-            log.error("账户信息推送断练重新连接", e);
-            streamIdList.add(listenUserStream(jsonListenKey));
-        }
+        //Websocket 账户信息推送
+        streamIdList.add(listenUserStream(jsonListenKey));
 
         listenKeyTimer = new Timer("ListenKeyTimer", true);
         listenKeyTimer.scheduleAtFixedRate(new TimerTask() {
@@ -254,8 +248,8 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
         }
     }
 
+    //Websocket 账户信息推送
     private int listenUserStream(JSONObject jsonListenKey) {
-        //账户信息推送
         return websocketClient.listenUserStream(jsonListenKey.getString("listenKey"), ((event) -> {
             log.info("账户信息推送:[{}]", event);
             JSONObject eventJson = JSON.parseObject(event);
