@@ -223,10 +223,7 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
                 }
 
             } catch (Exception t) {
-                log.error("{} OnRtnDepthMarketData Exception", logInfo, t);
-                //断练重新连接
-                this.disconnect();
-                this.connect();
+                log.error("{} 币安行情网关websocket订阅异常", logInfo, t);
             }
         }));
     }
