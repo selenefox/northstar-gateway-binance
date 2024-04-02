@@ -89,5 +89,7 @@ public class WebSocketConnection extends WebSocketListener {
     public void onFailure(WebSocket ws, Throwable t, Response response) {
         logger.error("[Connection {}] Failure", connectionId, t);
         onFailureCallback.onReceive(null);
+        //意外断开重连
+        this.onOpen(ws,response);
     }
 }
