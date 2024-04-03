@@ -61,7 +61,7 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
     @Getter
     private boolean connected;
 
-    private GatewayDescription gd;
+    private final GatewayDescription gd;
 
     private ConnectionState connState = ConnectionState.DISCONNECTED;
 
@@ -69,24 +69,22 @@ public class BinanceTradeGatewayLocal implements TradeGateway {
 
     private Timer listenKeyTimer;
 
-    private IMarketCenter mktCenter;
+    private final IMarketCenter mktCenter;
 
-    private BinanceGatewaySettings settings;
+    private final UMFuturesClientImpl futuresClient;
 
-    private UMFuturesClientImpl futuresClient;
-
-    private UMWebsocketClientImpl websocketClient;
+    private final UMWebsocketClientImpl websocketClient;
 
     protected Map<String, Order> orderMap = new HashMap<>();
 
     protected Map<String, SubmitOrderReq> submitOrderReqFieldMap = new HashMap<>();
 
-    private List<Integer> streamIdList = new ArrayList<>();
+    private final List<Integer> streamIdList = new ArrayList<>();
 
-    private Map<String, JSONObject> positionMap = new HashMap<>();
+    private final Map<String, JSONObject> positionMap = new HashMap<>();
 
     public BinanceTradeGatewayLocal(FastEventEngine feEngine, GatewayDescription gd, IMarketCenter mktCenter) {
-        this.settings = (BinanceGatewaySettings) gd.getSettings();
+        BinanceGatewaySettings settings = (BinanceGatewaySettings) gd.getSettings();
         this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey(), settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
         this.websocketClient = new UMWebsocketClientImpl(settings.isAccountType() ? DefaultUrls.USDM_WS_URL : DefaultUrls.USDM_UAT_WSS_URL);
         this.feEngine = feEngine;
