@@ -1,6 +1,22 @@
 package org.dromara.northstar.gateway.binance;
 
-import java.text.SimpleDateFormat;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+import com.binance.connector.client.enums.DefaultUrls;
+import com.binance.connector.client.exceptions.BinanceClientException;
+import com.binance.connector.client.exceptions.BinanceConnectorException;
+import com.binance.connector.client.impl.UMFuturesClientImpl;
+
+import org.dromara.northstar.common.IDataSource;
+import org.dromara.northstar.common.ObjectManager;
+import org.dromara.northstar.common.constant.ChannelType;
+import org.dromara.northstar.common.model.Identifier;
+import org.dromara.northstar.common.model.core.Bar;
+import org.dromara.northstar.common.model.core.Contract;
+import org.dromara.northstar.gateway.Gateway;
+import org.springframework.beans.factory.annotation.Autowired;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -13,29 +29,8 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.regex.Pattern;
-
-import org.dromara.northstar.common.IDataSource;
-import org.dromara.northstar.common.ObjectManager;
-import org.dromara.northstar.common.constant.ChannelType;
-import org.dromara.northstar.common.constant.DateTimeConstant;
-import org.dromara.northstar.common.model.Identifier;
-import org.dromara.northstar.common.model.core.Bar;
-import org.dromara.northstar.common.model.core.Contract;
-import org.dromara.northstar.common.model.core.ContractDefinition;
-import org.dromara.northstar.gateway.Gateway;
-import org.springframework.beans.factory.annotation.Autowired;
-
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
-import com.alibaba.fastjson2.JSONObject;
-import com.binance.connector.client.enums.DefaultUrls;
-import com.binance.connector.client.exceptions.BinanceClientException;
-import com.binance.connector.client.exceptions.BinanceConnectorException;
-import com.binance.connector.client.impl.UMFuturesClientImpl;
 
 import lombok.extern.slf4j.Slf4j;
-import xyz.redtorch.pb.CoreEnum;
 
 /**
  * @author 李嘉豪
@@ -61,9 +56,17 @@ public class BinanceDataServiceManager implements IDataSource {
 
         long minutes = Duration.between(startTime, endTime).toMinutes();
 
+        //按照1000分钟进行分割
         for (int i = 0; i <= minutes; i += 1000) {
             LocalDateTime currentStartTime = startTime.plusMinutes(i);
-            LocalDateTime currentEndTime = currentStartTime.plusMinutes(999);
+            LocalDateTime currentEndTime;
+            long l = minutes - i;
+            //最后不满1000分钟则取尾数
+            if (l < 1000) {
+                currentEndTime = currentStartTime.plusMinutes(l);
+            } else {
+                currentEndTime = currentStartTime.plusMinutes(999);
+            }
 
             Instant instantStart = currentStartTime.atZone(ZoneId.of("Asia/Shanghai")).toInstant();
             Instant instantEnd = currentEndTime.atZone(ZoneId.of("Asia/Shanghai")).toInstant();

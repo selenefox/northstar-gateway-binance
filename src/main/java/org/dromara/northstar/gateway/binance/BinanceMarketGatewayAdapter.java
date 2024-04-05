@@ -31,19 +31,18 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class BinanceMarketGatewayAdapter extends GatewayAbstract implements MarketGateway {
 
-    private UMWebsocketClientImpl client;
+    private final UMWebsocketClientImpl client;
 
-    private UMFuturesClientImpl futuresClient;
 
-    private FastEventEngine feEngine;
+    private final FastEventEngine feEngine;
 
-    private IMarketCenter mktCenter;
+    private final IMarketCenter mktCenter;
 
-    private GatewayDescription gd;
+    private final GatewayDescription gd;
 
     protected ConnectionState connState = ConnectionState.DISCONNECTED;
 
-    private List<Integer> streamIdList;
+    private final List<Integer> streamIdList;
 
     private volatile long lastUpdateTickTime = System.currentTimeMillis();
 
@@ -51,7 +50,6 @@ public class BinanceMarketGatewayAdapter extends GatewayAbstract implements Mark
         super(gd, mktCenter);
         BinanceGatewaySettings settings = (BinanceGatewaySettings) gd.getSettings();
         this.client = new UMWebsocketClientImpl(settings.isAccountType() ? DefaultUrls.USDM_WS_URL : DefaultUrls.USDM_UAT_WSS_URL);
-        this.futuresClient = new UMFuturesClientImpl(settings.getApiKey(), settings.getSecretKey(), settings.isAccountType() ? DefaultUrls.USDM_PROD_URL : DefaultUrls.USDM_UAT_URL);
         this.streamIdList = new ArrayList<>();
         this.feEngine = feEngine;
         this.gd = gd;
