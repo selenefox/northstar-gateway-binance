@@ -10,14 +10,13 @@ import org.dromara.northstar.gateway.IMarketCenter;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public abstract class GatewayAbstract implements Gateway {
+public abstract class  GatewayAbstract implements Gateway {
 
     protected String gatewayId;
-    protected String logInfo;
-    protected boolean autoErrorFlag = false;
-    protected long lastConnectBeginTimestamp = 0;
 
-    protected String gatewayTradingDay;
+    protected String logInfo;
+
+    protected boolean autoErrorFlag = false;
 
     protected GatewayDescription gatewayDescription;
 
